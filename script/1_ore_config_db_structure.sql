@@ -36,6 +36,7 @@ create TABLE dv_owner
 owner_key INTEGER DEFAULT nextval('dv_owner_key_seq'::regclass) PRIMARY KEY NOT NULL,
 owner_name VARCHAR(256),
 owner_description VARCHAR(256),
+is_retired BOOLEAN DEFAULT false NOT NULL,
 release_key INTEGER DEFAULT 0 NOT NULL,
 version_number INTEGER DEFAULT 1 NOT NULL,
 updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
@@ -44,7 +45,7 @@ CONSTRAINT fk_dv_owner_dv_release FOREIGN KEY (release_key) REFERENCES dv_releas
 
 );
 
-CREATE UNIQUE INDEX dv_owner_unq ON dv_owner (owner_key,owner_name);
+CREATE UNIQUE INDEX dv_owner_unq ON dv_owner (owner_name);
 
 -- source system
 CREATE SEQUENCE dv_source_system_key_seq start 1;
@@ -59,7 +60,7 @@ CREATE TABLE dv_source_system
     owner_key INTEGER DEFAULT 0 NOT NULL,
     version_number INTEGER DEFAULT 1,
     updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    update_date_time TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
     CONSTRAINT fk_dv_source_system_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_source_system_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
@@ -81,12 +82,12 @@ CREATE TABLE dv_source_table
     owner_key INTEGER DEFAULT 0 NOT NULL,
     version_number INTEGER DEFAULT 1,
     updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    update_date_time TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
     CONSTRAINT fk_dv_source_table_dv_source_system FOREIGN KEY (system_key) REFERENCES dv_source_system (source_system_key),
     CONSTRAINT fk_dv_source_table_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_source_table_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
-CREATE UNIQUE INDEX dv_source_system_unq ON dv_source_table (owner_key, system_key, source_table_schema, source_table_name);
+CREATE UNIQUE INDEX dv_source_system_unq ON dv_source_table (owner_key,system_key, source_table_schema, source_table_name);
 
 -- stage table - all get transformed into stage via stored procedures- business rules - separate entity
 CREATE SEQUENCE dv_stage_table_key_seq start 1;
@@ -102,7 +103,7 @@ CREATE TABLE dv_stage_table
     owner_key INTEGER DEFAULT 0 NOT NULL,
     version_number INTEGER DEFAULT 1,
     updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    update_date_time TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
     CONSTRAINT fk_dv_stage_table_dv_source_system FOREIGN KEY (system_key) REFERENCES dv_source_system (source_system_key),
     CONSTRAINT fk_dv_stage_table_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_stage_table_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
@@ -130,7 +131,7 @@ CREATE TABLE dv_stage_table_column
     owner_key INTEGER DEFAULT 0 NOT NULL,
     version_number INTEGER DEFAULT 1 NOT NULL,
     updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    update_date_time TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
     CONSTRAINT fk_dv_stage_table_column_dv_stage_table FOREIGN KEY (stage_table_key) REFERENCES dv_stage_table (stage_table_key),
     CONSTRAINT fk_dv_stage_table_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_stage_table_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
@@ -149,9 +150,10 @@ CREATE TABLE dv_business_rule
     business_rule_key INTEGER DEFAULT nextval('dv_business_rule_key_seq'::regclass) PRIMARY KEY NOT NULL,
     stage_table_key INTEGER NOT NULL,
     business_rule_name VARCHAR(128) NOT NULL,
-    business_rule_stored_proc_name VARCHAR(256) NOT NULL,
-    business_rule_stored_proc_schema VARCHAR(256) NOT NULL,
-    business_rule
+    business_rule_type varchar(20) not null default 'internal_sql', -- view, stored_proc
+    business_rule_logic text NOT NULL, -- can be view, stored proc or internally stored logic, notation = schema.name
+    is_external BOOLEAN DEFAULT false NOT NULL,
+    is_retired BOOLEAN DEFAULT false NOT NULL,
     release_key INTEGER DEFAULT 0 NOT NULL,
     owner_key INTEGER DEFAULT 0 NOT NULL,
     version_number INTEGER DEFAULT 1 NOT NULL,
@@ -161,7 +163,7 @@ CREATE TABLE dv_business_rule
     CONSTRAINT fk_dv_business_rule_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_business_rule_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
-CREATE UNIQUE INDEX dv_business_rule_key_unq ON dv_business_rule (owner_key,release_key,);
+CREATE UNIQUE INDEX dv_business_rule_key_unq ON dv_business_rule (owner_key,stage_table_key,business_rule_name);
 
 
 -- default columns
@@ -188,7 +190,7 @@ CREATE TABLE dv_default_column
     owner_key INTEGER DEFAULT 0 NOT NULL,
     version_number INTEGER DEFAULT 1 NOT NULL,
     updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    update_date_time TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
     CONSTRAINT fk_dv_default_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_default_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
@@ -286,7 +288,7 @@ CREATE TABLE dv_satellite
     CONSTRAINT fk_dv_satellite_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_satellite_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
-CREATE UNIQUE INDEX dv_satellite_unq ON dv_satellite (owner_key,satellite_name);
+CREATE UNIQUE INDEX dv_satellite_unq ON dv_satellite (owner_key,satellite_schema,satellite_name);
 
 
 -- configure sat columns and link them with source columns
