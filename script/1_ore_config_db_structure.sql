@@ -6,6 +6,8 @@
 -- multitenant solution
 -- one config DB should contain configuration data for DV for many customers
 
+-- drop schema ore_config cascade;
+
 CREATE SCHEMA ore_config;
 
 SHOW search_path;
@@ -152,6 +154,7 @@ CREATE TABLE dv_business_rule
     business_rule_name VARCHAR(128) NOT NULL,
     business_rule_type varchar(20) not null default 'internal_sql', -- view, stored_proc
     business_rule_logic text NOT NULL, -- can be view, stored proc or internally stored logic, notation = schema.name
+    load_type VARCHAR (50) not null,
     is_external BOOLEAN DEFAULT false NOT NULL,
     is_retired BOOLEAN DEFAULT false NOT NULL,
     release_key INTEGER DEFAULT 0 NOT NULL,
@@ -163,7 +166,7 @@ CREATE TABLE dv_business_rule
     CONSTRAINT fk_dv_business_rule_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
     CONSTRAINT fk_dv_business_rule_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
-CREATE UNIQUE INDEX dv_business_rule_key_unq ON dv_business_rule (owner_key,stage_table_key,business_rule_name);
+CREATE UNIQUE INDEX dv_business_rule_key_unq ON dv_business_rule (owner_key,stage_table_key,business_rule_name, load_type);
 
 
 -- default columns
@@ -218,27 +221,6 @@ CREATE TABLE dv_hub
 
 CREATE UNIQUE INDEX dv_hub_unq ON dv_hub (owner_key, hub_schema, hub_name);
 
--- hub column config
-create sequence dv_hub_column_key_seq start 1;
-
-CREATE TABLE dv_hub_column
-(
-    hub_column_key INTEGER DEFAULT nextval('dv_hub_column_key_seq'::regclass) PRIMARY KEY NOT NULL,
-    hub_key_column_key INTEGER NOT NULL,
-    column_key INTEGER NOT NULL,
-    release_key INTEGER DEFAULT 0 NOT NULL,
-    owner_key INTEGER DEFAULT 0 NOT NULL,
-    version_number INTEGER DEFAULT 1 NOT NULL,
-    updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    CONSTRAINT fk_dv_hub_column_dv_hub_key_column FOREIGN KEY (hub_key_column_key) REFERENCES dv_hub_key_column (hub_key_column_key),
-    CONSTRAINT fk_dv_hub_column_dv_column FOREIGN KEY (column_key) REFERENCES dv_source_column (column_key),
-    CONSTRAINT fk_dv_hub_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
-    CONSTRAINT fk_dv_hub_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
-);
-CREATE UNIQUE INDEX dv_hub_column_unq ON dv_hub_column (owner_key,hub_key_column_key, column_key);
-CREATE UNIQUE INDEX dv_hub_stage_table_column_unq ON dv_hub_column (owner_key,column_key);
-
 -- hub key config
 -- concatenated key?
 create sequence dv_hub_key_column_key_seq start 1;
@@ -264,6 +246,29 @@ CREATE TABLE dv_hub_key_column
     CONSTRAINT fk_dv_hub_key_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
 CREATE UNIQUE INDEX dv_hub_key_column_unq ON dv_hub_key_column (owner_key,hub_key, hub_key_column_name);
+
+-- hub column config
+create sequence dv_hub_column_key_seq start 1;
+
+CREATE TABLE dv_hub_column
+(
+    hub_column_key INTEGER DEFAULT nextval('dv_hub_column_key_seq'::regclass) PRIMARY KEY NOT NULL,
+    hub_key_column_key INTEGER NOT NULL,
+    column_key INTEGER NOT NULL,
+    release_key INTEGER DEFAULT 0 NOT NULL,
+    owner_key INTEGER DEFAULT 0 NOT NULL,
+    version_number INTEGER DEFAULT 1 NOT NULL,
+    updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    CONSTRAINT fk_dv_hub_column_dv_hub_key_column FOREIGN KEY (hub_key_column_key) REFERENCES dv_hub_key_column (hub_key_column_key),
+    CONSTRAINT fk_dv_hub_column_dv_column FOREIGN KEY (column_key) REFERENCES dv_stage_table_column (column_key),
+    CONSTRAINT fk_dv_hub_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+    CONSTRAINT fk_dv_hub_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
+);
+CREATE UNIQUE INDEX dv_hub_column_unq ON dv_hub_column (owner_key,hub_key_column_key, column_key);
+CREATE UNIQUE INDEX dv_hub_stage_table_column_unq ON dv_hub_column (owner_key,column_key);
+
+
 
 -- config satellite
 
@@ -311,6 +316,4 @@ CREATE TABLE dv_satellite_column
 );
 CREATE UNIQUE INDEX dv_satellite_column_unq ON dv_satellite_column (owner_key,satellite_key, column_key);
 CREATE UNIQUE INDEX dv_satellite_stage_table_column_unq ON dv_satellite_column (owner_key,column_key);
-
-
 
