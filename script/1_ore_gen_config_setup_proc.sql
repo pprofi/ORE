@@ -121,26 +121,23 @@ select dv_config_object_delete ('dv_release',1);
 
 CREATE OR REPLACE FUNCTION dv_config_object_update
   (
-    object_type_in VARCHAR(100), -- table name in a list of
-    object_key_in  INTEGER,
-    object_settings_in varchar[][2]-- here should be array of parameters to update
+    object_type_in     VARCHAR(100), -- table name in a list of
+    object_key_in      INTEGER,
+    object_settings_in VARCHAR [] [2]-- array parameters to update column_name -> value
   )
-RETURNS INT AS
+  RETURNS INT AS
 $BODY$
 DECLARE
-  rowcount_v   INTEGER :=0;
-  key_column_v VARCHAR(50);
-  column_name_v VARCHAR(50);
-  column_data_type_v varchar(50);
-  sql_v        VARCHAR(2000);
-  array_length_v int;
-  counter_v int;
-  delimiter_v char=' , ';
-
+  rowcount_v         INTEGER :=0;
+  key_column_v       VARCHAR(50);
+  column_name_v      VARCHAR(50);
+  column_data_type_v VARCHAR(50);
+  sql_v              VARCHAR(2000);
+  array_length_v     INT;
+  counter_v          INT;
+  delimiter_v        CHAR = ' , ';
 BEGIN
 
-  -- check if table exists
-  -- need to find all columns to update as well
   rowcount_v:=0;
 
   -- find primary key column and check if object exists
@@ -165,61 +162,69 @@ BEGIN
   THEN
     RAISE NOTICE 'Not valid object type --> %', object_type_in;
   ELSE
-    -- delete record
-  sql_v:='update '
-          || ' '
-          || quote_ident(object_type_in)
-          || ' set ';
-  -- number of parameters to update
-  array_length_v:=array_length(object_settings_in, 1);
+    -- update statement
+    sql_v:='update '
+           || ' '
+           || quote_ident(object_type_in)
+           || ' set ';
 
-  -- check if there is anything to update
+    -- if there any columns to update
+    array_length_v:=array_length(object_settings_in, 1);
 
-    if array_length_v=0 then
-       RAISE NOTICE 'Nothing to update, check parameters --> %', object_settings_in;
-    else
-counter_v:=0;
-  -- all columns to lookup in information schema
- for i  in  1..array_length_v loop
-
-   select c.column_name,c.data_type
-   into column_name_v, column_data_type_v
-   from information_schema.tables t join information_schema.columns c
-  on t.table_schema=c.table_schema and t.table_name=c.table_name
-where t.table_schema='ore_config' and t.table_name=object_type_in
-   and c.column_name=object_settings_in[i][1]
-   and c.column_name not in ('updated_by','updated_datetime',key_column_v)
-     ;
-   GET DIAGNOSTICS rowcount_v = ROW_COUNT;
-
-   if rowcount_v>0 then
-   counter_v:=counter_v+1;
-   if counter_v>1 THEN
-     sql_v:=sql_v||
-                 delimiter_v
-     ;
-   END IF;
-
-  sql_v:=sql_v||quote_ident(column_name_v)
-    ||'='
-    ||' cast('
-    ||quote_literal(object_settings_in[i][2])
-    || ' as '
-    || quote_literal(column_data_type_v)
-   ||')'
-   ;
- end if;
-end loop;
     -- here should be cycle for all columns to be updated
-  sql_v:=sql_v  || ' where '
-          || quote_ident(key_column_v)
-          || '='
-          || quote_literal(object_key_in);
+    IF array_length_v = 0
+    THEN
+      RAISE NOTICE 'Nothing to update, check parameters --> %', object_settings_in;
+    ELSE
+      -- in case some incorrect parameters
+      counter_v:=0;
+      -- all columns to lookup in information schema
+      FOR i IN 1..array_length_v LOOP
 
-  EXECUTE  sql_v;
+        SELECT
+          c.column_name,
+          c.data_type
+        INTO column_name_v, column_data_type_v
+        FROM information_schema.tables t
+          JOIN information_schema.columns c
+            ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+        WHERE t.table_schema = 'ore_config' AND t.table_name = object_type_in
+              AND c.column_name = object_settings_in [i] [1]
+              AND c.column_name NOT IN ('updated_by', 'updated_datetime', key_column_v);
+        GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+
+        IF rowcount_v > 0
+        THEN
+          counter_v:=counter_v + 1;
+          IF counter_v > 1
+          THEN
+            sql_v:=sql_v || delimiter_v;
+          END IF;
+
+          sql_v:=sql_v || quote_ident(column_name_v)
+                 || '='
+                 || ' cast('
+                 || quote_literal(object_settings_in [i] [2])
+                 || ' as '
+                 || quote_literal(column_data_type_v)
+                 || ')';
+        END IF;
+      END LOOP;
+
+      IF counter_v > 0
+      THEN
+        sql_v:=sql_v || ' where '
+               || quote_ident(key_column_v)
+               || '='
+               || quote_literal(object_key_in);
+
+        EXECUTE sql_v;
+      ELSE
+        RAISE NOTICE 'Nothing to update or parameters prohibited to update, check parameters --> %', object_settings_in;
+      END IF;
+    END IF;
+
   END IF;
-
-   end if;
   -- check if something actually been deleted
   GET DIAGNOSTICS rowcount_v = ROW_COUNT;
   RETURN rowcount_v;
@@ -229,9 +234,39 @@ $BODY$
 LANGUAGE plpgsql;
 
 
-select t.table_name,c.column_name,c.data_type from information_schema.tables t join information_schema.columns c
-  on t.table_schema=c.table_schema and t.table_name=c.table_name
-where t.table_schema='ore_config';
+------- TEST
+
+INSERT INTO dv_release
+(
+  release_number,
+  release_description,
+  version_number)
+VALUES (20170209, 'testing generic del func', 1);
+
+select * from dv_release;
+
+-- case 1 parameter, incorrect, not exists or one of forbidden
+
+-- case 2 correct parameters
+
+-- case 3 one not correct and rest correct
+
+-- case 4 not found object to update - incorrect
+
+-- case 5 not found key value 
+
+
+
+
+----------------
+
+
+
+
+
+
+
+
 
 
 
