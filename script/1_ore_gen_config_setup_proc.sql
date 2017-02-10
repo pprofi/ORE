@@ -190,7 +190,7 @@ BEGIN
             ON t.table_schema = c.table_schema AND t.table_name = c.table_name
         WHERE t.table_schema = 'ore_config' AND t.table_name = object_type_in
               AND c.column_name = object_settings_in [i] [1]
-              AND c.column_name NOT IN ('updated_by', 'updated_datetime', key_column_v);
+              AND c.column_name NOT IN ('updated_by', 'updated_datetime', key_column_v,'release_key');
         GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
         IF rowcount_v > 0
@@ -287,6 +287,7 @@ $BODY$
 DECLARE
   rowcount_v     INTEGER :=0;
   column_name_v  VARCHAR(50);
+  column_value_v varchar;
   column_type_v  VARCHAR(30);
   release_key_v  INT;
   owner_key_v    INT;
@@ -299,7 +300,7 @@ BEGIN
 
   rowcount_v:=0;
   -- check if object exists
-  SELECT 1
+  SELECT count(*)
   INTO rowcount_v
   FROM information_schema.tables t
   WHERE t.table_schema = 'ore_config' AND t.table_name = object_type_in;
@@ -337,7 +338,7 @@ BEGIN
           CASE WHEN c.column_name = kcu.column_name
             THEN 1
           ELSE NULL END                                        AS f,
-          0                                                    AS is_found
+         cast( 0 as integer)                                                   AS is_found
         FROM information_schema.tables t
           JOIN information_schema.columns c
             ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -370,37 +371,54 @@ BEGIN
   FOR i IN 1..array_length_v LOOP
 
   -- checking release_number and owner_key existance
-    IF object_settings_in [i] [1] = 'release_number'
+    -- excluded for dv_release
+
+    IF object_settings_in [i] [1] = 'release_number' and object_type_in not in('dv_release')
     THEN
       SELECT release_key
       INTO release_key_v
       FROM dv_release
-      WHERE release_number = object_settings_in [i] [2];
+      WHERE release_number = cast (object_settings_in [i] [2] as integer);
+
+      GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+
+    IF rowcount_v = 0
+    THEN
+      RAISE NOTICE 'Nonexistent release_number --> %', object_settings_in [i] [2];
+      RETURN rowcount_v = 0;
+    END IF;
     END IF;
 
-    IF object_settings_in [i] [1] = 'owner_key'
+
+
+    IF object_settings_in [i] [1] = 'owner_key' and object_type_in not in ('dv_release','dv_owner','dv_default_column')
     THEN
       SELECT owner_key
       INTO owner_key_v
       FROM dv_owner
-      WHERE owner_key = object_settings_in [i] [2];
-    END IF;
+      WHERE owner_key = cast(object_settings_in [i] [2] as integer);
 
     GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
     IF rowcount_v = 0
     THEN
-      RAISE NOTICE 'Nonexistent release_number or owner_key --> %', object_settings_in [i] [2];
+      RAISE NOTICE 'Nonexistent owner_key --> %', object_settings_in [i] [2];
       RETURN rowcount_v = 0;
     END IF;
+    END IF;
+
+
 
     -- lookup columns in temp table
     SELECT
       column_name,
-      data_type
-    INTO column_name_v, column_type_v
+      data_type,
+      case when column_name='release_key' then cast(release_key_v as varchar) else object_settings_in [i] [2] end
+    INTO column_name_v, column_type_v, column_value_v
     FROM columns_list_tmp
-    WHERE column_name = object_settings_in [i] [1];
+    WHERE column_name = replace(object_settings_in [i] [1],'release_number','release_key');
+
+     RAISE NOTICE 'SQL --> %', column_name_v||';'|| column_type_v;
 
     GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
@@ -414,20 +432,26 @@ BEGIN
         sql_select_v:=sql_select_v || delimiter_v;
       END IF;
 
+      RAISE NOTICE 'SQL --> %', sql_v;
+      RAISE NOTICE 'SQL --> %', sql_select_v;
+
       -- sql list of columns
-      sql_v:=sql_v || quote_ident(object_settings_in [i] [1]);
+      sql_v:=sql_v || quote_ident(column_name_v);
       -- sql list of values
-      sql_select_v:=sql_select_v ||
+      sql_select_v:=sql_select_v
                     ||' cast('
-                    || quote_literal(object_settings_in [i] [2])
+                    || quote_literal(column_value_v)
                     || ' as '
                     || column_type_v
                     || ')';
 
+       RAISE NOTICE 'SQL --> %', sql_v;
       -- update if column was found
       UPDATE columns_list_tmp
       SET is_found = 1
       WHERE column_name = column_name_v;
+
+       RAISE NOTICE 'SQL --> %', sql_v;
     END IF;
 
   END LOOP;
@@ -460,3 +484,19 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
+-- test case 1 no parameters
+select dv_config_object_insert('dv_release','{{"hub_key","2"},{"release_key","3"}}');
+
+-- test case 2 some incorrect parameters
+
+
+-- test 3 incorrect object (+)
+select dv_config_object_insert('dv_release_x','{{"release_description","Bla bla"},{"version_number","3"}}');
+
+-- test 4 all good
+select dv_config_object_insert('dv_release','{{"release_description","Bla bla"},{"version_number","3"},{"release_number","20170210"}}');
+select dv_config_object_insert('dv_owner','{{"owner_name","Bla bla"},{"owner_description","test tes"},{"release_number","20170210"},{"version_number","1"},{"is_retired","0"}}');
+-- test 5 release or owner not correct
+
+-- test 6 not enough not nullable parameters
+select dv_config_object_insert('dv_release','{{"release_description","Bla bla"},{"version_number","3"}}');
