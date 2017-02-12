@@ -387,7 +387,8 @@ BEGIN
     IF rowcount_v = 0
     THEN
       RAISE NOTICE 'Nonexistent release_number --> %', object_settings_in [i] [2];
-      RETURN rowcount_v = 0;
+
+      RETURN rowcount_v;
     END IF;
     END IF;
 
@@ -405,11 +406,14 @@ BEGIN
     IF rowcount_v = 0
     THEN
       RAISE NOTICE 'Nonexistent owner_key --> %', object_settings_in [i] [2];
-      RETURN rowcount_v = 0;
-    END IF;
+
+      RETURN rowcount_v ;
+
     END IF;
 
+    END IF;
 
+    RAISE NOTICE 'SQL blabla check--> %', sql_v;
     -- lookup columns in temp table
     SELECT
       column_name,
@@ -452,6 +456,11 @@ BEGIN
       SET is_found = 1
       WHERE column_name = column_name_v;
 
+       GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+
+       RAISE NOTICE 'SQL --> %',rowcount_v;
+
+       RAISE NOTICE 'SQL --> %',column_name_v;
        RAISE NOTICE 'SQL --> %', sql_v;
     END IF;
 
@@ -462,7 +471,9 @@ BEGIN
   SELECT count(*)
   INTO counter_v
   FROM columns_list_tmp
-  WHERE (is_nullable = 'NO' or column_default is not null) AND is_found = 0;
+  WHERE is_nullable = 'NO' and column_default is null AND is_found = 0;
+
+  RAISE NOTICE 'SQL --> %', counter_v;
 
   IF counter_v > 0
   THEN
@@ -492,33 +503,40 @@ select dv_config_object_insert('dv_release','{{"hub_key","2"},{"release_key","3"
 
 
 -- test 3 incorrect object (+)
-select dv_config_object_insert('dv_release_x','{{"release_description","Bla bla"},{"version_number","3"}}');
+select dv_config_object_insert('dv_release_x','{{"release_description","Bla blas"},{"version_number","34"}}');
 
 -- test 4 all good
 select dv_config_object_insert('dv_release','{{"release_description","Bla bla"},{"version_number","3"},{"release_number","20170210"}}');
 select dv_config_object_insert('dv_owner','{{"owner_name","Bla bla"},{"owner_description","test tes"},{"release_number","20170210"},{"version_number","1"},{"is_retired","0"}}');
 select dv_config_object_insert('dv_hub','{{"hub_name","Bla bla"},{"hub_schema","test"},{"release_number","20170210"},{"owner_key","1"}}');
+
+select dv_config_object_insert('dv_hub','{{"hub_name","Bla blas"},{"hub_schema","test"},{"release_number","20170215"},{"owner_key","12"}}');
 -- test 5 release or owner not correct
 
 -- test 6 not enough not nullable parameters
 select dv_config_object_insert('dv_release','{{"release_description","Bla bla"},{"version_number","3"}}');
 
-select * from dv_release
 
-CREATE TABLE dv_hub
+select * from dv_hub;
+
+
+CREATE TABLE dv_release_test
 (
-    hub_key INTEGER DEFAULT nextval('dv_hub_hub_key_seq'::regclass) PRIMARY KEY NOT NULL,
-    hub_name VARCHAR(128) NOT NULL,
-    hub_abbreviation VARCHAR(4),
-    hub_schema VARCHAR(128) NOT NULL,
-    is_retired BOOLEAN DEFAULT false NOT NULL,
-    release_key INTEGER DEFAULT 0 NOT NULL,
-    owner_key INTEGER DEFAULT 0 NOT NULL,
+    release_key INTEGER DEFAULT nextval('dv_release_key_seq'::regclass) PRIMARY KEY NOT NULL,
+    release_number INTEGER NOT NULL,
+    release_description VARCHAR(256),
     version_number INTEGER DEFAULT 1 NOT NULL,
-    updated_by VARCHAR(50) DEFAULT 'suser_name()'::character varying,
-    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    CONSTRAINT fk_dv_hub_dv_release_master FOREIGN KEY (release_key) REFERENCES dv_release_master (release_key),
-    CONSTRAINT fk_dv_hub_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
+    updated_by VARCHAR(50) DEFAULT current_user  NOT NULL,
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+
+
 );
-CREATE UNIQUE INDEX dv_hub_abr_unq ON dv_hub (owner_key, hub_abbreviation);
-CREATE UNIQUE INDEX dv_hub_unq ON dv_hub (owner_key, hub_schema, hub_name);
+
+insert into dv_release_test (release_number,release_description)
+    select 12345,'test'
+
+
+select * from dv_release_test;
+
+
+select dv_config_object_insert('dv_hub','{{"hub_name","Bla blas"},{"hub_schema","test"},{"release_number","20170215"},{"owner_key","1"}}');
