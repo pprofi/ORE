@@ -1,50 +1,17 @@
+/*-------------------------------------------
+        OPTIMAL REPORTING ENGINE
+        CONFIG SETUP SCRIPTS
+-------------------------------------------*/
+
+-- file with procedures for configuring config db
+-- use prefix
+-- dv_config_<>
+-- generic code to setup config
+
 SET search_path TO ore_config;
 
-CREATE SEQUENCE dv_config_object_list_key_seq START 1;
 
-drop table dv_config_object_list;
-
-CREATE TABLE dv_config_object_list
-(
-  object_key  INTEGER DEFAULT nextval('dv_config_object_list_key_seq'::regclass) PRIMARY KEY NOT NULL,
-  object_name VARCHAR(50),
-  table_name  VARCHAR(100)
-);
-truncate dv_config_object_list;
-
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('release', 'dv_release');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('hub', 'dv_hub');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('satellite', 'dv_satellite');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('source_system', 'dv_source_system');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('source_table', 'dv_source_table');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('stage_table', 'dv_stage_table');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('stage_table_column', 'dv_stage_table_column');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('owner', 'dv_owner');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('hub_column', 'dv_hub_column');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('satellite_column', 'dv_satellite_column');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('hub_key_column', 'dv_hub_key_column');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('business_rule', 'dv_business_rule');
-INSERT INTO dv_config_object_list (object_name, table_name)
-VALUES ('default_column', 'dv_default_column');
-
-select * from dv_config_object_list;
---- common procedure
--- only tables in a list
--- should be dynamically execute ddl statements
--- using parameters binding
-
+/*--------------- DELETE OBJECT ----------------------------------*/
 CREATE OR REPLACE FUNCTION dv_config_object_delete
   (
     object_type_in VARCHAR(100), -- table name in a list of
@@ -56,6 +23,7 @@ DECLARE
   rowcount_v   INTEGER :=0;
   key_column_v VARCHAR(50);
   sql_v        VARCHAR(2000);
+  object_schema_v varchar(50):='ore_config';
 BEGIN
 
   -- check if table exists
@@ -76,7 +44,7 @@ BEGIN
          AND kcu.table_name = tc.table_name
          AND kcu.constraint_name = tc.constraint_name
   WHERE
-    t.table_schema = 'ore_config' AND t.table_name = object_type_in;
+    t.table_schema = object_schema_v AND t.table_name = object_type_in;
 
   GET DIAGNOSTICS rowcount_v = ROW_COUNT;
   IF rowcount_v = 0
@@ -95,6 +63,7 @@ BEGIN
 
   -- check if something actually been deleted
   GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+
   RETURN rowcount_v;
 
 END
@@ -103,26 +72,13 @@ LANGUAGE plpgsql;
 
 
 
--- test --
-INSERT INTO dv_release
-(
-  release_number,
-  release_description,
-  version_number)
-VALUES (20170209, 'testing generic del func', 1);
 
-select * from dv_release;
-
-select dv_config_object_delete ('dv_release',1);
-
--- WOW working!
-
--- update object details
+/*-------------- UPDATE CONFIG OBJECT DETAILS --------------------- */
 
 CREATE OR REPLACE FUNCTION dv_config_object_update
   (
-    object_type_in     VARCHAR(100), -- table name in a list of
-    object_key_in      INTEGER,
+    object_type_in     VARCHAR(100), -- config table name
+    object_key_in      INTEGER, -- object key
     object_settings_in VARCHAR [] [2]-- array parameters to update column_name -> value
   )
   RETURNS INT AS
@@ -136,26 +92,51 @@ DECLARE
   array_length_v     INT;
   counter_v          INT;
   delimiter_v        CHAR(10) = ' , ';
+  object_schema_v    VARCHAR(50) :='ore_config';
 BEGIN
 
   rowcount_v:=0;
 
-  -- find primary key column and check if object exists
-  SELECT kcu.column_name
+  -- list of all columns
+  CREATE TEMP TABLE columns_list_tmp ON COMMIT DROP AS
+    SELECT
+      column_name,
+      data_type,
+      is_key,
+      is_no_update
+    FROM
+      (
+        SELECT
+          c.column_name,
+          c.is_nullable,
+          replace(c.data_type, 'character varying', 'varchar') AS data_type,
+          CASE WHEN c.column_name = kcu.column_name
+            THEN 1
+          ELSE 0 END                                        AS is_key,
+          CASE WHEN c.column_name IN ('updated_by', 'updated_datetime', 'release_key')
+            THEN 1
+          ELSE 0 END                                              is_no_update
+        FROM information_schema.tables t
+          JOIN information_schema.columns c
+            ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+          LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+            ON tc.table_catalog = t.table_catalog
+               AND tc.table_schema = t.table_schema
+               AND tc.table_name = t.table_name
+               AND tc.constraint_type = 'PRIMARY KEY'
+          LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+            ON kcu.table_catalog = tc.table_catalog
+               AND kcu.table_schema = tc.table_schema
+               AND kcu.table_name = tc.table_name
+               AND kcu.constraint_name = tc.constraint_name
+        WHERE t.table_schema = object_schema_v AND t.table_name = object_type_in
+      ) r;
+
+  -- check if object exists
+  SELECT column_name
   INTO key_column_v
-  FROM INFORMATION_SCHEMA.TABLES t
-    LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-      ON tc.table_catalog = t.table_catalog
-         AND tc.table_schema = t.table_schema
-         AND tc.table_name = t.table_name
-         AND tc.constraint_type = 'PRIMARY KEY'
-    LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-      ON kcu.table_catalog = tc.table_catalog
-         AND kcu.table_schema = tc.table_schema
-         AND kcu.table_name = tc.table_name
-         AND kcu.constraint_name = tc.constraint_name
-  WHERE
-    t.table_schema = 'ore_config' AND t.table_name = object_type_in;
+  FROM columns_list_tmp
+  WHERE is_key = 1;
 
   GET DIAGNOSTICS rowcount_v = ROW_COUNT;
   IF rowcount_v = 0
@@ -168,7 +149,7 @@ BEGIN
            || quote_ident(object_type_in)
            || ' set ';
 
-    -- if there any columns to update
+    -- if there are any columns to update
     array_length_v:=array_length(object_settings_in, 1);
 
     -- here should be cycle for all columns to be updated
@@ -181,17 +162,16 @@ BEGIN
       -- all columns to lookup in information schema
       FOR i IN 1..array_length_v LOOP
 
+        -- excluding key and audit parameters for update
         SELECT
-          c.column_name,
-          replace(c.data_type,'character varying','varchar')
+          column_name,
+          data_type
         INTO column_name_v, column_data_type_v
-        FROM information_schema.tables t
-          JOIN information_schema.columns c
-            ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-        WHERE t.table_schema = 'ore_config' AND t.table_name = object_type_in
-              AND c.column_name = object_settings_in [i] [1]
-              AND c.column_name NOT IN ('updated_by', 'updated_datetime', key_column_v,'release_key');
+        FROM columns_list_tmp
+        WHERE is_key=0  AND is_no_update =0 AND column_name = object_settings_in [i] [1];
+
         GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+
 
         IF rowcount_v > 0
         THEN
@@ -216,7 +196,7 @@ BEGIN
         sql_v:=sql_v || ' where '
                || quote_ident(key_column_v)
                || '='
-               || quote_literal(cast(object_key_in as int));
+               || quote_literal(cast(object_key_in AS INT));
 
         RAISE NOTICE 'SQL --> %', sql_v;
 
@@ -236,46 +216,7 @@ $BODY$
 LANGUAGE plpgsql;
 
 
-------- TEST
-
-INSERT INTO dv_release
-(
-  release_number,
-  release_description,
-  version_number)
-VALUES (20170209, 'testing generic del func', 1);
-
-select * from dv_release;
-
--- case 1 parameter, incorrect, not exists or one of forbidden
-
-
-
-
-select dv_config_object_update('dv_release_1',2,'{{"hub_key","2"},{"release_key","3"}}');
-
-select '{{"hub_key","2"},{"release_key","3"}}';
-
--- case 2 correct parameters
-select dv_config_object_update('dv_release',2,'{{"release_description","update test case 2"}}');
-
-
--- case 3 one not correct and rest correct
-select dv_config_object_update('dv_release',2,
-                               '{{"release_description","update test case 3"},{"release_key","3"},{"version_number","2"}}');
-
--- case 4 not found object to update - incorrect
-select dv_config_object_update('dv_release',3,'{{"hub_key","2"},{"release_key","3"}}');
-
--- case 5 nothing to update
-
-select dv_config_object_update('dv_release',3,NULL);
-
-
-----------------
-
-
--- insert object details
+/*------------------ ADD OBJECT INTO CONFIG ----------------*/
 
 CREATE OR REPLACE FUNCTION dv_config_object_insert
   (
@@ -285,17 +226,18 @@ CREATE OR REPLACE FUNCTION dv_config_object_insert
   RETURNS INT AS
 $BODY$
 DECLARE
-  rowcount_v     INTEGER :=0;
-  column_name_v  VARCHAR(50);
-  column_value_v varchar;
-  column_type_v  VARCHAR(30);
-  release_key_v  INT;
-  owner_key_v    INT;
-  sql_v          VARCHAR(2000);
-  sql_select_v   VARCHAR(2000);
-  array_length_v INT;
-  counter_v      INT;
-  delimiter_v    CHAR(10) = ' , ';
+  rowcount_v      INTEGER :=0;
+  column_name_v   VARCHAR(50);
+  column_value_v  VARCHAR;
+  column_type_v   VARCHAR(30);
+  release_key_v   INT;
+  owner_key_v     INT;
+  sql_v           VARCHAR(2000);
+  sql_select_v    VARCHAR(2000);
+  array_length_v  INT;
+  counter_v       INT;
+  delimiter_v     CHAR(10) = ' , ';
+  object_schema_v VARCHAR(50) :='ore_config';
 BEGIN
 
   rowcount_v:=0;
@@ -303,7 +245,7 @@ BEGIN
   SELECT count(*)
   INTO rowcount_v
   FROM information_schema.tables t
-  WHERE t.table_schema = 'ore_config' AND t.table_name = object_type_in;
+  WHERE t.table_schema = object_schema_v AND t.table_name = object_type_in;
 
   IF rowcount_v = 0
   THEN
@@ -316,7 +258,7 @@ BEGIN
 
   IF array_length_v = 0
   THEN
-    RAISE NOTICE 'Nothing to update, check parameters --> %', object_settings_in;
+    RAISE NOTICE 'Nothing to insert, check parameters --> %', object_settings_in;
     RETURN array_length_v;
   END IF;
 
@@ -338,8 +280,8 @@ BEGIN
           replace(c.data_type, 'character varying', 'varchar') AS data_type,
           CASE WHEN c.column_name = kcu.column_name
             THEN 1
-          ELSE NULL END                                        AS f,
-         cast( 0 as integer)                                                   AS is_found,
+          ELSE NULL END                                        AS is_key,
+          cast(0 AS INTEGER)                                   AS is_found,
           column_default
         FROM information_schema.tables t
           JOIN information_schema.columns c
@@ -354,9 +296,9 @@ BEGIN
                AND kcu.table_schema = tc.table_schema
                AND kcu.table_name = tc.table_name
                AND kcu.constraint_name = tc.constraint_name
-        WHERE t.table_schema = 'ore_config' AND t.table_name = object_type_in
+        WHERE t.table_schema = object_schema_v AND t.table_name = object_type_in
               AND c.column_name NOT IN ('updated_by', 'updated_datetime')) r
-    WHERE f IS NULL;
+    WHERE is_key IS NULL;
 
   -- insert statement
   sql_v:='insert into '
@@ -372,108 +314,98 @@ BEGIN
   -- columns to lookup in information schema
   FOR i IN 1..array_length_v LOOP
 
-  -- checking release_number and owner_key existance
+    -- checking release_number and owner_key existance
     -- excluded for dv_release
 
-    IF object_settings_in [i] [1] = 'release_number' and object_type_in not in('dv_release')
+    IF object_settings_in [i] [1] = 'release_number' AND object_type_in NOT IN ('dv_release')
     THEN
       SELECT release_key
       INTO release_key_v
       FROM dv_release
-      WHERE release_number = cast (object_settings_in [i] [2] as integer);
+      WHERE release_number = cast(object_settings_in [i] [2] AS INTEGER);
 
       GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
-    IF rowcount_v = 0
-    THEN
-      RAISE NOTICE 'Nonexistent release_number --> %', object_settings_in [i] [2];
+      IF rowcount_v = 0
+      THEN
+        RAISE NOTICE 'Nonexistent release_number --> %', object_settings_in [i] [2];
 
-      RETURN rowcount_v;
+        RETURN rowcount_v;
+      END IF;
     END IF;
-    END IF;
 
 
-
-    IF object_settings_in [i] [1] = 'owner_key' and object_type_in not in ('dv_release','dv_owner','dv_default_column')
+    IF object_settings_in [i] [1] = 'owner_key' AND
+       object_type_in NOT IN ('dv_release', 'dv_owner', 'dv_default_column')
     THEN
       SELECT owner_key
       INTO owner_key_v
       FROM dv_owner
-      WHERE owner_key = cast(object_settings_in [i] [2] as integer);
+      WHERE owner_key = cast(object_settings_in [i] [2] AS INTEGER);
 
-    GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+      GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
-    IF rowcount_v = 0
-    THEN
-      RAISE NOTICE 'Nonexistent owner_key --> %', object_settings_in [i] [2];
-
-      RETURN rowcount_v ;
-
-    END IF;
+      IF rowcount_v = 0
+      THEN
+        RAISE NOTICE 'Nonexistent owner_key --> %', object_settings_in [i] [2];
+        RETURN rowcount_v;
+      END IF;
 
     END IF;
 
-    RAISE NOTICE 'SQL blabla check--> %', sql_v;
     -- lookup columns in temp table
+    -- release number processed differently for 2 cases - dv_release and the rest
     SELECT
       column_name,
       data_type,
-      case when column_name='release_key' then cast(release_key_v as varchar) else object_settings_in [i] [2] end
+      CASE WHEN column_name = 'release_key'
+        THEN cast(release_key_v AS VARCHAR)
+      ELSE object_settings_in [i] [2] END
     INTO column_name_v, column_type_v, column_value_v
     FROM columns_list_tmp
-    WHERE column_name = replace(object_settings_in [i] [1],'release_number','release_key');
-
-     RAISE NOTICE 'SQL --> %', column_name_v||';'|| column_type_v||';'||column_value_v;
+    WHERE column_name = CASE WHEN object_type_in <> 'dv_release'
+      THEN replace(object_settings_in [i] [1], 'release_number', 'release_key')
+                        ELSE object_settings_in [i] [1] END;
 
     GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
     IF rowcount_v > 0
     THEN
       counter_v:=counter_v + 1;
-
       IF counter_v > 1
       THEN
         sql_v:=sql_v || delimiter_v;
         sql_select_v:=sql_select_v || delimiter_v;
       END IF;
 
-      RAISE NOTICE 'SQL --> %', sql_v;
-      RAISE NOTICE 'SQL --> %', sql_select_v;
-
       -- sql list of columns
       sql_v:=sql_v || quote_ident(column_name_v);
       -- sql list of values
       sql_select_v:=sql_select_v
-                    ||' cast('
+                    || ' cast('
                     || quote_literal(column_value_v)
                     || ' as '
                     || column_type_v
                     || ')';
 
-       RAISE NOTICE 'SQL --> %', sql_v;
       -- update if column was found
       UPDATE columns_list_tmp
       SET is_found = 1
       WHERE column_name = column_name_v;
-
-       GET DIAGNOSTICS rowcount_v = ROW_COUNT;
-
-       RAISE NOTICE 'SQL --> %',rowcount_v;
-
-       RAISE NOTICE 'SQL --> %',column_name_v;
-       RAISE NOTICE 'SQL --> %', sql_v;
     END IF;
 
   END LOOP;
 
+
+
   counter_v:=0;
-  -- check number of parameters
+  -- check number of 'not found must' parameters for insert
   SELECT count(*)
   INTO counter_v
   FROM columns_list_tmp
-  WHERE is_nullable = 'NO' and column_default is null AND is_found = 0;
+  WHERE is_nullable = 'NO' AND column_default IS NULL AND is_found = 0;
 
-  RAISE NOTICE 'SQL --> %', counter_v;
+
 
   IF counter_v > 0
   THEN
@@ -482,7 +414,6 @@ BEGIN
   ELSE
 
     sql_v:=sql_v || ') ' || sql_select_v;
-
 
     EXECUTE sql_v;
     RAISE NOTICE 'SQL --> %', sql_v;
@@ -496,47 +427,3 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
--- test case 1 no parameters
-select dv_config_object_insert('dv_release','{{"hub_key","2"},{"release_key","3"}}');
-
--- test case 2 some incorrect parameters
-
-
--- test 3 incorrect object (+)
-select dv_config_object_insert('dv_release_x','{{"release_description","Bla blas"},{"version_number","34"}}');
-
--- test 4 all good
-select dv_config_object_insert('dv_release','{{"release_description","Bla bla"},{"version_number","3"},{"release_number","20170210"}}');
-select dv_config_object_insert('dv_owner','{{"owner_name","Bla bla"},{"owner_description","test tes"},{"release_number","20170210"},{"version_number","1"},{"is_retired","0"}}');
-select dv_config_object_insert('dv_hub','{{"hub_name","Bla bla"},{"hub_schema","test"},{"release_number","20170210"},{"owner_key","1"}}');
-
-select dv_config_object_insert('dv_hub','{{"hub_name","Bla blas"},{"hub_schema","test"},{"release_number","20170215"},{"owner_key","12"}}');
--- test 5 release or owner not correct
-
--- test 6 not enough not nullable parameters
-select dv_config_object_insert('dv_release','{{"release_description","Bla bla"},{"version_number","3"}}');
-
-
-select * from dv_hub;
-
-
-CREATE TABLE dv_release_test
-(
-    release_key INTEGER DEFAULT nextval('dv_release_key_seq'::regclass) PRIMARY KEY NOT NULL,
-    release_number INTEGER NOT NULL,
-    release_description VARCHAR(256),
-    version_number INTEGER DEFAULT 1 NOT NULL,
-    updated_by VARCHAR(50) DEFAULT current_user  NOT NULL,
-    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
-
-
-);
-
-insert into dv_release_test (release_number,release_description)
-    select 12345,'test'
-
-
-select * from dv_release_test;
-
-
-select dv_config_object_insert('dv_hub','{{"hub_name","Bla blas"},{"hub_schema","test"},{"release_number","20170215"},{"owner_key","1"}}');
