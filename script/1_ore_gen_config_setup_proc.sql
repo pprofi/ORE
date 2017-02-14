@@ -265,6 +265,8 @@ BEGIN
   -- return list of columns except from key column and audit columns
   -- also fine if column omitted and nullable
   -- need checking release and owner integrity
+  DROP TABLE IF EXISTS columns_list_tmp;
+
   CREATE TEMP TABLE columns_list_tmp ON COMMIT DROP AS
     SELECT
       column_name,
@@ -397,14 +399,12 @@ BEGIN
   END LOOP;
 
 
-
   counter_v:=0;
   -- check number of 'not found must' parameters for insert
   SELECT count(*)
   INTO counter_v
   FROM columns_list_tmp
   WHERE is_nullable = 'NO' AND column_default IS NULL AND is_found = 0;
-
 
 
   IF counter_v > 0
@@ -421,6 +421,7 @@ BEGIN
 
   -- check if something actually been deleted
   GET DIAGNOSTICS rowcount_v = ROW_COUNT;
+
   RETURN rowcount_v;
 
 END

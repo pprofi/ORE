@@ -1,0 +1,14 @@
+object_type	object_column_type	ordinal_position	column_prefix	column_name	column_suffix	column_type	column_length	column_precision	column_scale	collation_Name	is_able	is_pk	discard_flag	release_key	version_number
+Hub	Object_Key	1	h_	_	_key	int					0	1	0	0	1
+Hub	Load_Date_Time	2		dv_load_date_time		datetimeoffset		7			0	0	0	0	1
+Hub	Data_Source	3		dv_record_source		varchar	50				0	0	0	0	1
+Lnk	Object_Key	1	l_	_	_key	int					0	1	0	0	1
+Lnk	Load_Date_Time	2		dv_load_date_time		datetimeoffset		7			0	0	0	0	1
+Lnk	Data_Source	3		dv_record_source		varchar	50				0	0	0	0	1
+Sat	Object_Key	1	s_	_	_key	int					0	1	0	0	1
+Sat	Source_Date_Time	3		dv_source_date_time		datetimeoffset		7			0	0	0	0	1
+Sat	Data_Source	4		dv_record_source		varchar	50				0	0	0	0	1
+Sat	Current_Row	5		dv_row_is_current		bit					0	0	0	0	1
+Sat	Tombstone_Indicator	6		dv_is_tombstone		bit					0	0	0	0	1
+Sat	Version_Start_Date	7		dv_rowstartdate		datetimeoffset		7			0	0	0	0	1
+Sat	Version_End_Date	8		dv_rowenddate		datetimeoffset		7			0	0	0	0	1
