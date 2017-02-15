@@ -120,6 +120,13 @@ SET column_type = 'timestamp'
 WHERE column_type = 'datetimeoffset';
 
 UPDATE ore_config.dv_default_column
+SET column_name = '%'
+WHERE column_name = '_';
+commit;
+
+select * from ore_config.dv_default_column
+
+UPDATE ore_config.dv_default_column
 SET object_type = case when object_type='Hub' then 'hub' when object_type='Sat' then 'satellite'
   else 'link' end
 ;
@@ -147,30 +154,37 @@ CREATE TYPE dv_column_type AS
 );
 
 
+
+
+
 CREATE OR REPLACE FUNCTION dv_config_dv_table_create(
   object_name_in    VARCHAR(128),
   object_schema_in  VARCHAR(128),
   object_type_in    VARCHAR(30),
-  object_columns_in dv_column_type ,
+ -- object_columns_in REFCURSOR,
   recreate_flag_in  CHAR(1) = 'N'
 )
   RETURNS INT AS
 $BODY$
 DECLARE
-  rowcount_v  INT :=0;
-  sql_create_v       TEXT;
-  sql_key_v text;
-  sql_col_def_v text;
-  sql_index_v       TEXT;
-  sql_drop_v text;
-  crlf_v      CHAR(10) :=' ';
-  delimiter_v CHAR(2) :=',';
-  array_length_v     INT;
+  rowcount_v    INT :=0;
+  sql_create_v  TEXT;
+  sql_key_v     TEXT;
+  sql_col_def_v TEXT;
+  sql_index_v   TEXT;
+  sql_drop_v    TEXT;
+  crlf_v        CHAR(10) :=' ';
+  delimiter_v   CHAR(2) :=',';
+  cnt_rec_v     INT;
+  r             dv_column_type;
+  rec           RECORD;
+
 BEGIN
 
--- check if parameters correct
--- schema exists
--- object_type correct satellite, hub, stage_table
+  -- check if parameters correct
+  -- schema exists
+  -- object_type correct satellite, hub, stage_table
+  RAISE NOTICE 'SQL --> %', sql_create_v;
 
   IF COALESCE(object_name_in, '') = ''
   THEN
@@ -182,20 +196,13 @@ BEGIN
     RAISE NOTICE 'Not valid object schema--> %', object_schema_in;
     RETURN rowcount_v;
   END IF;
-  IF COALESCE(object_type_in, '') NOT IN ('Hub', 'Lnk', 'Sat')
+  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite', 'stage_table')
   THEN
-    RAISE NOTICE 'Not valid object type: can be only hub, satellite --> %', object_type_in;
+    RAISE NOTICE 'Not valid object type: can be only hub, satellite, stage_table --> %', object_type_in;
     RETURN rowcount_v;
   END IF;
 
-   -- if there are any columns
-    array_length_v:=array_length(object_columns_in, 1);
-
-  IF array_length_v = 0
-  THEN
-    RAISE NOTICE 'Not valid object columns --> %', object_columns_in;
-    RETURN rowcount_v;
-  END IF;
+  -- check parameters
 
   IF COALESCE(recreate_flag_in, '') NOT IN ('Y', 'N')
   THEN
@@ -203,16 +210,17 @@ BEGIN
     RETURN rowcount_v;
   END IF;
 
--- if recreate flag set to Yes then drop
+  -- check if object already exists
 
-  IF recreate_flag_in = 'Y'
+  SELECT count(*)
+  INTO rowcount_v
+  FROM information_schema.tables t
+  WHERE t.table_schema = object_schema_in AND t.table_name = object_name_in;
+
+  -- if recreate flag set to Yes then drop / the same if set to No and object exists
+
+  IF recreate_flag_in = 'Y' OR (recreate_flag_in = 'N' AND rowcount_v = 1)
   THEN
-
-    SELECT count(*)
-    INTO rowcount_v
-    FROM information_schema.tables t
-    WHERE t.table_schema = object_schema_in AND t.table_name = object_name_in;
-
     IF rowcount_v = 1
     THEN
       sql_drop_v:='DROP TABLE ' || object_schema_in || '.' || object_name_in;
@@ -223,104 +231,119 @@ BEGIN
 
   END IF;
 
-
   -- build create statement
-  sql_create_v:='create table '||object_schema_in || '.' || object_name_in||' (';
-  sql_key_v:='serial primary key,';
+  sql_create_v:='create table ' || object_schema_in || '.' || object_name_in || ' (';
 
   -- column definitions
 
-  FOR i IN 1..array_length_v LOOP
+  FOR rec IN (SELECT
+              case WHEN d.object_column_type = 'Object_Key'
+                then rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', object_name_in) ||
+                   coalesce(column_suffix, '')) else d.column_name end AS column_name,
 
-   select fn_build_column_definition(object_columns_ini) into sql_col_def_v;
-   sql_create_v:=sql_create_v||crlf_v||sql_col_def_v|| crlf_v||delimiter_v;
+              column_type,
+              column_length,
+              column_precision,
+              column_scale,
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN 0
+              ELSE 1 END                         AS is_nullable,
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN 1
+              ELSE 0 END                         AS is_key
+            FROM dv_default_column d
+            WHERE object_type = object_type_in) LOOP
+    SELECT fn_build_column_definition(rec.column_name, rec.column_type,
+                                      rec.column_length,
+                                      rec.column_precision,
+                                      rec.column_scale,
+                                      rec.is_nullable,
+                                      rec.is_key)
+    INTO sql_col_def_v;
 
-
+    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
   END LOOP;
 
-SET _Step = 'Create Table Statement'
-SELECT SQL += 'CREATE TABLE ' + table_name + '(' + crlf + ' '
+  -- open cursor
+/*
+  WHILE TRUE
+  LOOP
+    FETCH object_columns_in INTO r;
 
-  /*--------------------------------------------------------------------------------------------------------------*/
-  SET _Step = 'Add the Columns'
---1. Primary Key
-SELECT SQL = SQL + column_name +
-             dbo.fn_build_column_definition(column_type, column_length, column_precision, column_scale, Collation_Name,
-                                            0, 1) + crlf + ','
-FROM fn_get_key_definition(object_name, object_type)
-
---Payload
-SELECT SQL = SQL + column_name + ' ' +
-             dbo.fn_build_column_definition(column_type, column_length, column_precision, column_scale, Collation_Name,
-                                            1, 0) + crlf + ','
-FROM
-  (SELECT *
-   FROM default_columns) a
-ORDER BY source_ordinal_position
-
-SELECT SQL = SQL + column_name + ' ' +
-             dbo.fn_build_column_definition(column_type, column_length, column_precision, column_scale, Collation_Name,
-                                            1, 0) + crlf + ','
-FROM
-  (SELECT *
-   FROM payload_columns) a
-ORDER BY satellite_ordinal_position, column_name
+    -- add key column
 
 
+    SELECT fn_build_column_definition(r.column_name, r.column_type,
+                                      r.column_length,
+                                      r.column_precision,
+                                      r.column_scale,
+                                      1,
+                                      0)
+    INTO sql_col_def_v;
+
+    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
+    EXIT WHEN NOT found;
+    RAISE NOTICE '%', r;
+  END LOOP;
+  */
+
+  sql_create_v:=sql_create_v||' )';
+
+  RAISE NOTICE 'SQL --> %', sql_create_v;
+  RETURN rowcount_v;
 END
 $BODY$
 LANGUAGE plpgsql;
 
 
 -- column definition
-create or replace FUNCTION fn_build_column_definition
-(
-	 data_type_in varchar(50),
-   data_length_in int,
-   precision_in int,
-   scale_in int,
-   is_nullable_in bit,
-   is_key_in bit
-)
-RETURNS varchar AS
+CREATE OR REPLACE FUNCTION fn_build_column_definition
+  (
+    column_name_in varchar(50),
+    data_type_in   VARCHAR(50),
+    data_length_in INT,
+    precision_in   INT,
+    scale_in       INT,
+    is_nullable_in int,
+    is_key_in      int
+  )
+  RETURNS VARCHAR AS
 $BODY$
 DECLARE
-  result_v varchar(500);
+  result_v VARCHAR(500);
 BEGIN
 
-  result_v:=upper(data_type_in);
+  result_v:= column_name_in;
 
- CASE
---NUMERIC
-  WHEN upper(data_type_in) IN ('decimal','numeric')
-               THEN
+  -- if key
+  IF is_key_in = 1
+  THEN
+    result_v:=result_v||' serial primary key';
+  ELSE
+    result_v:=result_v||' '||upper(data_type_in);
+    CASE
+    -- numeric
+      WHEN upper(data_type_in) IN ('decimal', 'numeric')
+      THEN
+        result_v:=result_v || '(' || cast(precision_in AS VARCHAR) || ',' || cast(scale_in AS VARCHAR) || ') ';
+    -- varchar
+      WHEN upper(data_type_in) IN ('char', 'varchar')
+      THEN
+        result_v:=result_v || '(' || cast(data_length_in AS VARCHAR) || ')';
+    ELSE
+      result_v:=result_v;
+    END CASE;
 
-  result_v:=result_v||'('||cast(precision_in as varchar)||','||cast(scale_in as varchar)||') ';
+    -- if not null
+    IF is_nullable_in = 0
+    THEN
+      result_v:=result_v || ' NOT NULL ';
+    END IF;
+
+  END IF;
 
 
---FLOAT
-               WHEN  upper(data_type_in) IN ('float', 'int','integer','double precision',
-                                             'smallint','bigint','text','real','money','bootean','bit')
-               THEN
-                   result_v:=result_v;
---char varchar
-               WHEN  upper(data_type_in) IN ('char','varchar')
-               THEN
-
-result_v:=result_v||'('||cast(data_length_in as varchar)||')';
---datetime
-               WHEN UPPER(DataType) IN ('datetime','image','real')
-               THEN SPACE(18 - LEN(UPPER(DataType)))
-                    + '              '
-
-
-
-
-
-set ResultVar = rtrim(ResultVar) + case when isnull (is_identity, 1) = 1 then ' IDENTITY(1,1) ' else ' ' END
-
-set ResultVar = rtrim(ResultVar) + case when isnull (is_nullable, 1) = 1 then '' else ' NOT' END + ' NULL'
-RETURN result_v;
+  RETURN result_v;
 
 END
 $BODY$
