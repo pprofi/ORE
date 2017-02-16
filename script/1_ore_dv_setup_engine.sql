@@ -142,6 +142,7 @@ SET object_type = case when object_type='Hub' then 'hub' when object_type='Sat' 
 
 -- type
 
+/*
 
 CREATE TYPE dv_column_type AS
 (
@@ -155,13 +156,15 @@ CREATE TYPE dv_column_type AS
 
 
 
+*/
 
+/*
 
 CREATE OR REPLACE FUNCTION dv_config_dv_table_create(
   object_name_in    VARCHAR(128),
   object_schema_in  VARCHAR(128),
   object_type_in    VARCHAR(30),
- -- object_columns_in REFCURSOR,
+  object_columns_in REFCURSOR,
   recreate_flag_in  CHAR(1) = 'N'
 )
   RETURNS INT AS
@@ -176,8 +179,8 @@ DECLARE
   crlf_v        CHAR(10) :=' ';
   delimiter_v   CHAR(2) :=',';
   cnt_rec_v     INT;
-  r             dv_column_type;
-  rec           RECORD;
+  rec_all       RECORD;
+  rec_default   RECORD;
 
 BEGIN
 
@@ -236,29 +239,30 @@ BEGIN
 
   -- column definitions
 
-  FOR rec IN (SELECT
-              case WHEN d.object_column_type = 'Object_Key'
-                then rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', object_name_in) ||
-                   coalesce(column_suffix, '')) else d.column_name end AS column_name,
+  FOR rec_default IN (SELECT
+                        CASE WHEN d.object_column_type = 'Object_Key'
+                          THEN rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', object_name_in) ||
+                                     coalesce(column_suffix, ''))
+                        ELSE d.column_name END AS column_name,
 
-              column_type,
-              column_length,
-              column_precision,
-              column_scale,
-              CASE WHEN d.object_column_type = 'Object_Key'
-                THEN 0
-              ELSE 1 END                         AS is_nullable,
-              CASE WHEN d.object_column_type = 'Object_Key'
-                THEN 1
-              ELSE 0 END                         AS is_key
-            FROM dv_default_column d
-            WHERE object_type = object_type_in) LOOP
-    SELECT fn_build_column_definition(rec.column_name, rec.column_type,
-                                      rec.column_length,
-                                      rec.column_precision,
-                                      rec.column_scale,
-                                      rec.is_nullable,
-                                      rec.is_key)
+                        column_type,
+                        column_length,
+                        column_precision,
+                        column_scale,
+                        CASE WHEN d.object_column_type = 'Object_Key'
+                          THEN 0
+                        ELSE 1 END             AS is_nullable,
+                        CASE WHEN d.object_column_type = 'Object_Key'
+                          THEN 1
+                        ELSE 0 END             AS is_key
+                      FROM dv_default_column d
+                      WHERE object_type = object_type_in) LOOP
+    SELECT fn_build_column_definition(rec_default.column_name, rec_default.column_type,
+                                      rec_default.column_length,
+                                      rec_default.column_precision,
+                                      rec_default.column_scale,
+                                      rec_default.is_nullable,
+                                      rec_default.is_key)
     INTO sql_col_def_v;
 
     sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
@@ -268,34 +272,35 @@ BEGIN
 /*
   WHILE TRUE
   LOOP
-    FETCH object_columns_in INTO r;
+    FETCH object_columns_in INTO rec_all;
 
     -- add key column
 
 
-    SELECT fn_build_column_definition(r.column_name, r.column_type,
-                                      r.column_length,
-                                      r.column_precision,
-                                      r.column_scale,
+    SELECT fn_build_column_definition(rec_all.column_name, rec_all.column_type,
+                                      rec_all.column_length,
+                                      rec_all.column_precision,
+                                      rec_all.column_scale,
                                       1,
                                       0)
     INTO sql_col_def_v;
 
     sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
     EXIT WHEN NOT found;
-    RAISE NOTICE '%', r;
+    RAISE NOTICE '%', rec_all;
   END LOOP;
-  */
 
-  sql_create_v:=sql_create_v||' )';
+*/
+  sql_create_v:=sql_create_v || ' )';
 
   RAISE NOTICE 'SQL --> %', sql_create_v;
   RETURN rowcount_v;
 END
 $BODY$
 LANGUAGE plpgsql;
+*/
 
-
+/*
 -- column definition
 CREATE OR REPLACE FUNCTION fn_build_column_definition
   (
@@ -348,3 +353,195 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
+*/
+
+
+CREATE TYPE col_type AS
+(
+  column_name      VARCHAR(128),
+  column_type      VARCHAR(50) ,
+  column_length    INT ,
+  column_precision INT ,
+  column_scale     INT ,
+  is_nullable int,
+  is_key int
+);
+
+
+CREATE OR REPLACE FUNCTION fn_build_column_definition
+  (
+    r col_type
+  )
+  RETURNS VARCHAR AS
+$BODY$
+DECLARE
+  result_v VARCHAR(500);
+BEGIN
+
+  result_v:= r.column_name;
+
+  -- if key
+  IF r.is_key = 1
+  THEN
+    result_v:=result_v || ' serial primary key';
+  ELSE
+    result_v:=result_v || ' ' || upper(r.column_type);
+    CASE
+    -- numeric
+      WHEN upper(r.column_type) IN ('decimal', 'numeric')
+      THEN
+        result_v:=result_v || '(' || cast(r.column_precision AS VARCHAR) || ',' || cast(r.column_scale AS VARCHAR) ||
+                  ') ';
+        -- varchar
+      WHEN upper(r.column_type) IN ('char', 'varchar')
+      THEN
+        result_v:=result_v || '(' || cast(r.column_length AS VARCHAR) || ')';
+    ELSE
+      result_v:=result_v;
+    END CASE;
+
+    -- if not null
+    IF r.is_nullable = 0
+    THEN
+      result_v:=result_v || ' NOT NULL ';
+    END IF;
+
+  END IF;
+
+
+  RETURN result_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION dv_config_dv_table_create(
+  object_name_in    VARCHAR(128),
+  object_schema_in  VARCHAR(128),
+  object_type_in    VARCHAR(30),
+  object_columns_in REFCURSOR,
+  recreate_flag_in  CHAR(1) = 'N'
+)
+  RETURNS INT AS
+$BODY$
+DECLARE
+  rowcount_v    INT :=0;
+  sql_create_v  TEXT;
+  sql_key_v     TEXT;
+  sql_col_def_v TEXT;
+  sql_index_v   TEXT;
+  sql_drop_v    TEXT;
+  crlf_v        CHAR(10) :=' ';
+  delimiter_v   CHAR(2) :=',';
+  cnt_rec_v     INT;
+  rec_all       col_type;
+  rec_default   col_type;
+
+BEGIN
+
+  -- check if parameters correct
+  -- schema exists
+  -- object_type correct satellite, hub, stage_table
+  RAISE NOTICE 'SQL --> %', sql_create_v;
+
+  IF COALESCE(object_name_in, '') = ''
+  THEN
+    RAISE NOTICE 'Not valid object name --> %', object_name_in;
+    RETURN rowcount_v;
+  END IF;
+  IF COALESCE(object_schema_in, '') = ''
+  THEN
+    RAISE NOTICE 'Not valid object schema--> %', object_schema_in;
+    RETURN rowcount_v;
+  END IF;
+  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite', 'stage_table')
+  THEN
+    RAISE NOTICE 'Not valid object type: can be only hub, satellite, stage_table --> %', object_type_in;
+    RETURN rowcount_v;
+  END IF;
+
+  -- check parameters
+
+  IF COALESCE(recreate_flag_in, '') NOT IN ('Y', 'N')
+  THEN
+    RAISE NOTICE 'Not valid recreate_flag value : Y or N --> %', recreate_flag_in;
+    RETURN rowcount_v;
+  END IF;
+
+  -- check if object already exists
+
+  SELECT count(*)
+  INTO rowcount_v
+  FROM information_schema.tables t
+  WHERE t.table_schema = object_schema_in AND t.table_name = object_name_in;
+
+  -- if recreate flag set to Yes then drop / the same if set to No and object exists
+
+  IF recreate_flag_in = 'Y' OR (recreate_flag_in = 'N' AND rowcount_v = 1)
+  THEN
+    IF rowcount_v = 1
+    THEN
+      sql_drop_v:='DROP TABLE ' || object_schema_in || '.' || object_name_in;
+    ELSE
+      RAISE NOTICE 'Can not drop table, object does not exist  --> %', object_schema_in || '.' || object_name_in;
+      RETURN rowcount_v;
+    END IF;
+
+  END IF;
+
+  -- build create statement
+  sql_create_v:='create table ' || object_schema_in || '.' || object_name_in || ' (';
+
+  -- column definitions
+
+  FOR rec_default IN (SELECT
+                        CASE WHEN d.object_column_type = 'Object_Key'
+                          THEN rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', object_name_in) ||
+                                     coalesce(column_suffix, ''))
+                        ELSE d.column_name END AS column_name,
+
+                        column_type,
+                        column_length,
+                        column_precision,
+                        column_scale,
+                        CASE WHEN d.object_column_type = 'Object_Key'
+                          THEN 0
+                        ELSE 1 END             AS is_nullable,
+                        CASE WHEN d.object_column_type = 'Object_Key'
+                          THEN 1
+                        ELSE 0 END             AS is_key
+                      FROM dv_default_column d
+                      WHERE object_type = object_type_in) LOOP
+    SELECT fn_build_column_definition(rec_default)
+    INTO sql_col_def_v;
+
+    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
+  END LOOP;
+
+  -- open cursor
+
+  WHILE TRUE
+  LOOP
+    FETCH $4 INTO rec_all;
+    EXIT WHEN NOT found;
+    -- add key column
+
+    SELECT fn_build_column_definition(rec_all)
+    INTO sql_col_def_v;
+
+    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
+
+    RAISE NOTICE '%', rec_all;
+  END LOOP;
+
+
+  sql_create_v:=sql_create_v || ' )';
+
+  RAISE NOTICE 'SQL --> %', sql_create_v;
+  RETURN rowcount_v;
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
