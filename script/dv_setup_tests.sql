@@ -397,3 +397,10 @@ select substring(tx from 1 for length(tx)-1) into tx_sub;
 end$$;
 
 -- get object default columns
+do $$
+declare
+
+begin
+end;$$
+
+select * from fn_get_dv_object_default_columns('customer','hub');

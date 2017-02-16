@@ -710,9 +710,9 @@ LANGUAGE plpgsql;
 -- function for getting set of default columns for data vault object
 
 
-CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_type_in VARCHAR(128)
+CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_name_in VARCHAR(128), object_type_in VARCHAR(128)
 )
- RETURNS SETOF dv_column_type AS
+  RETURNS SETOF dv_column_type AS
 $BODY$
 DECLARE
   r dv_column_type%ROWTYPE;
@@ -742,7 +742,8 @@ BEGIN
                 THEN 1
               ELSE 0 END             AS is_key
             FROM dv_default_column d
-            WHERE object_type = object_type_in) LOOP
+            WHERE object_type = object_type_in
+            ORDER BY is_key DESC) LOOP
     RETURN NEXT r;
   END LOOP;
   RETURN;
