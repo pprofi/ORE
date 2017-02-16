@@ -209,7 +209,7 @@ LANGUAGE plpgsql;
 
 
 -- test
-create table test_col_type of col_type;
+create table test_col_type of dv_column_type;
 
 CREATE TYPE col_type AS
 (
@@ -376,7 +376,22 @@ BEGIN
   open xxx;
   select ore_config.dv_config_dv_table_create('customer',
   'ore_config',
-  'hub',
+  --'hub',
   'xxx',
    'N') into sqlv;
+end$$;
+
+
+DO $$
+declare
+tx text:='test of adding columns,';
+  tx_sub text;
+len_v int;
+begin
+
+select length(tx)-1 into len_v;
+   raise notice '%', len_v;
+
+select substring(tx from 1 for length(tx)-1) into tx_sub;
+  raise notice '%', tx_sub;
 end$$;

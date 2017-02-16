@@ -355,7 +355,7 @@ $BODY$
 LANGUAGE plpgsql;
 */
 
-
+/*
 CREATE TYPE col_type AS
 (
   column_name      VARCHAR(128),
@@ -377,7 +377,7 @@ $BODY$
 DECLARE
   result_v VARCHAR(500);
 BEGIN
-
+-- build column definition
   result_v:= r.column_name;
 
   -- if key
@@ -535,8 +535,7 @@ BEGIN
     RAISE NOTICE '%', rec_all;
   END LOOP;
 
-
-  sql_create_v:=sql_create_v || ' )';
+  sql_create_v:=substring(sql_create_v from 1 for length(sql_create_v)-1) || ' )';
 
   RAISE NOTICE 'SQL --> %', sql_create_v;
   RETURN rowcount_v;
@@ -545,3 +544,162 @@ $BODY$
 LANGUAGE plpgsql;
 
 
+*/
+
+
+--  ver 2 more generic code
+
+CREATE TYPE dv_column_type AS
+(
+  column_name      VARCHAR(128),
+  column_type      VARCHAR(50) ,
+  column_length    INT ,
+  column_precision INT ,
+  column_scale     INT ,
+  is_nullable int,
+  is_key int
+);
+
+
+CREATE OR REPLACE FUNCTION fn_build_column_definition
+  (
+    r dv_column_type
+  )
+  RETURNS VARCHAR AS
+$BODY$
+DECLARE
+  result_v VARCHAR(500);
+BEGIN
+-- build column definition
+  result_v:= r.column_name;
+
+  -- if key
+  IF r.is_key = 1
+  THEN
+    result_v:=result_v || ' serial primary key';
+  ELSE
+    result_v:=result_v || ' ' || upper(r.column_type);
+    CASE
+    -- numeric
+      WHEN upper(r.column_type) IN ('decimal', 'numeric')
+      THEN
+        result_v:=result_v || '(' || cast(r.column_precision AS VARCHAR) || ',' || cast(r.column_scale AS VARCHAR) ||
+                  ') ';
+        -- varchar
+      WHEN upper(r.column_type) IN ('char', 'varchar')
+      THEN
+        result_v:=result_v || '(' || cast(r.column_length AS VARCHAR) || ')';
+    ELSE
+      result_v:=result_v;
+    END CASE;
+
+    -- if not null
+    IF r.is_nullable = 0
+    THEN
+      result_v:=result_v || ' NOT NULL ';
+    END IF;
+
+  END IF;
+
+
+  RETURN result_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION dv_config_dv_table_create(
+  object_name_in    VARCHAR(128),
+  object_schema_in  VARCHAR(128),
+  object_columns_in REFCURSOR,
+  recreate_flag_in  CHAR(1) = 'N'
+)
+  RETURNS INT AS
+$BODY$
+DECLARE
+  rowcount_v    INT :=0;
+  sql_create_v  TEXT;
+  sql_key_v     TEXT;
+  sql_col_def_v TEXT;
+  sql_index_v   TEXT;
+  sql_drop_v    TEXT;
+  crlf_v        CHAR(10) :=' ';
+  delimiter_v   CHAR(2) :=',';
+  cnt_rec_v     INT;
+  rec       dv_column_type;
+
+BEGIN
+
+  -- check if parameters correct
+  -- schema exists
+  -- object_type correct satellite, hub, stage_table
+  RAISE NOTICE 'SQL --> %', sql_create_v;
+
+  IF COALESCE(object_name_in, '') = ''
+  THEN
+    RAISE NOTICE 'Not valid object name --> %', object_name_in;
+    RETURN rowcount_v;
+  END IF;
+  IF COALESCE(object_schema_in, '') = ''
+  THEN
+    RAISE NOTICE 'Not valid object schema--> %', object_schema_in;
+    RETURN rowcount_v;
+  END IF;
+
+  -- check parameters
+
+  IF COALESCE(recreate_flag_in, '') NOT IN ('Y', 'N')
+  THEN
+    RAISE NOTICE 'Not valid recreate_flag value : Y or N --> %', recreate_flag_in;
+    RETURN rowcount_v;
+  END IF;
+
+  -- check if object already exists
+
+  SELECT count(*)
+  INTO rowcount_v
+  FROM information_schema.tables t
+  WHERE t.table_schema = object_schema_in AND t.table_name = object_name_in;
+
+  -- if recreate flag set to Yes then drop / the same if set to No and object exists
+
+  IF recreate_flag_in = 'Y' OR (recreate_flag_in = 'N' AND rowcount_v = 1)
+  THEN
+    IF rowcount_v = 1
+    THEN
+      sql_drop_v:='DROP TABLE ' || object_schema_in || '.' || object_name_in;
+    ELSE
+      RAISE NOTICE 'Can not drop table, object does not exist  --> %', object_schema_in || '.' || object_name_in;
+      RETURN rowcount_v;
+    END IF;
+
+  END IF;
+
+  -- build create statement
+  sql_create_v:='create table ' || object_schema_in || '.' || object_name_in || ' (';
+
+  -- column definitions
+  -- open cursor
+
+  WHILE TRUE
+  LOOP
+    FETCH $3 INTO rec;
+    EXIT WHEN NOT found;
+    -- add key column
+
+    SELECT fn_build_column_definition(rec)
+    INTO sql_col_def_v;
+
+    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
+
+  RAISE NOTICE '%', rec;
+  END LOOP;
+
+  sql_create_v:=substring(sql_create_v from 1 for length(sql_create_v)-1) || ' )';
+
+  RAISE NOTICE 'SQL --> %', sql_create_v;
+  RETURN rowcount_v;
+END
+$BODY$
+LANGUAGE plpgsql;
