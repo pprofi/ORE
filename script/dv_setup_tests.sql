@@ -408,3 +408,47 @@ select * from fn_get_dv_object_default_columns('customer','hub');
 
 -- create hub test
 -- add to config
+
+-- dv_hub
+-- dv_hub_key_column
+select * from dv_owner;
+select * from dv_release;
+
+select * from dv_hub;
+select * from public.dv_hub;
+
+select * from public.dv_hub_key_column;
+
+select * from dv_hub_key_column;
+
+create schema DV;
+
+-- add hub records
+SELECT dv_config_object_insert('dv_hub',
+                               '{{"hub_name","customer"},{"hub_schema","DV"},{"release_number","0"},{"owner_key","2"}}');
+
+-- add hub key column
+
+SELECT dv_config_object_insert('dv_hub_key_column',
+                               '{{"hub_key","2"},{"hub_key_column_name","CustomerID"},
+                               {"hub_key_column_type","varchar"},
+                               {"hub_key_column_length","30"},
+                               {"hub_key_column_precision","0"},
+                               {"hub_key_column_scale","0"},
+                               {"release_number","0"},{"owner_key","2"}}');
+
+SELECT *
+FROM dv_config_dv_create_hub(
+    'customer',
+    'DV',
+    2,
+    'N'
+);
+
+create table DV.customer (
+  h_customer_key serial primary key,
+  dv_record_source VARCHAR,
+  dv_load_date_time TIMESTAMP,
+  CustomerID VARCHAR )
+
+
