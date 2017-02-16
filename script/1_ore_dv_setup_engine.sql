@@ -560,6 +560,7 @@ CREATE TYPE dv_column_type AS
   is_key int
 );
 
+-- column definition function
 
 CREATE OR REPLACE FUNCTION fn_build_column_definition
   (
@@ -608,6 +609,7 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
+-- generic function for table creation ddl using set of columns passed as ref cursor
 
 CREATE OR REPLACE FUNCTION dv_config_dv_table_create(
   object_name_in    VARCHAR(128),
@@ -627,7 +629,7 @@ DECLARE
   crlf_v        CHAR(10) :=' ';
   delimiter_v   CHAR(2) :=',';
   cnt_rec_v     INT;
-  rec       dv_column_type;
+  rec           dv_column_type;
 
 BEGIN
 
@@ -693,13 +695,57 @@ BEGIN
 
     sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
 
-  RAISE NOTICE '%', rec;
+    RAISE NOTICE '%', rec;
   END LOOP;
 
-  sql_create_v:=substring(sql_create_v from 1 for length(sql_create_v)-1) || ' )';
+  -- remove last comma
+  sql_create_v:=substring(sql_create_v FROM 1 FOR length(sql_create_v) - 1) || ' )';
 
   RAISE NOTICE 'SQL --> %', sql_create_v;
   RETURN rowcount_v;
 END
 $BODY$
 LANGUAGE plpgsql;
+
+-- function for getting set of default columns for data vault object
+
+
+CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_type_in VARCHAR(128)
+)
+ RETURNS SETOF dv_column_type AS
+$BODY$
+DECLARE
+  r dv_column_type%ROWTYPE;
+BEGIN
+
+  -- check parameter
+  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite')
+  THEN
+    RAISE NOTICE 'Not valid object type: can be only hub, satellite --> %', object_type_in;
+    RETURN;
+  END IF;
+
+  FOR r IN (SELECT
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', object_name_in) ||
+                           coalesce(column_suffix, ''))
+              ELSE d.column_name END AS column_name,
+
+              column_type,
+              column_length,
+              column_precision,
+              column_scale,
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN 0
+              ELSE 1 END             AS is_nullable,
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN 1
+              ELSE 0 END             AS is_key
+            FROM dv_default_column d
+            WHERE object_type = object_type_in) LOOP
+    RETURN NEXT r;
+  END LOOP;
+  RETURN;
+END
+$BODY$
+LANGUAGE 'plpgsql';

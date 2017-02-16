@@ -395,3 +395,5 @@ select length(tx)-1 into len_v;
 select substring(tx from 1 for length(tx)-1) into tx_sub;
   raise notice '%', tx_sub;
 end$$;
+
+-- get object default columns
