@@ -404,3 +404,7 @@ begin
 end;$$
 
 select * from fn_get_dv_object_default_columns('customer','hub');
+
+
+-- create hub test
+-- add to config
