@@ -579,15 +579,15 @@ BEGIN
   THEN
     result_v:=result_v || ' serial primary key';
   ELSE
-    result_v:=result_v || ' ' || upper(r.column_type);
+    result_v:=result_v || ' ' || lower(r.column_type);
     CASE
     -- numeric
-      WHEN upper(r.column_type) IN ('decimal', 'numeric')
+      WHEN lower(r.column_type) IN ('decimal', 'numeric')
       THEN
         result_v:=result_v || '(' || cast(r.column_precision AS VARCHAR) || ',' || cast(r.column_scale AS VARCHAR) ||
                   ') ';
         -- varchar
-      WHEN upper(r.column_type) IN ('char', 'varchar')
+      WHEN lower(r.column_type) IN ('char', 'varchar')
       THEN
         result_v:=result_v || '(' || cast(r.column_length AS VARCHAR) || ')';
     ELSE
@@ -602,6 +602,7 @@ BEGIN
 
   END IF;
 
+raise NOTICE 'Column defenition % -->',result_v;
 
   RETURN result_v;
 

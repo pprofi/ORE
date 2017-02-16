@@ -447,8 +447,13 @@ FROM dv_config_dv_create_hub(
 
 create table DV.customer (
   h_customer_key serial primary key,
-  dv_record_source VARCHAR,
-  dv_load_date_time TIMESTAMP,
-  CustomerID VARCHAR )
+  dv_record_source varchar(50),
+  dv_load_date_time timestamp,
+  CustomerID varchar(30) );
+
+
+-- add index test
+
+-- add drop if recreate
 
 
