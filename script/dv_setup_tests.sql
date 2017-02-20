@@ -229,7 +229,7 @@ INSERT INTO test_col_type (column_name,
                          column_length,
                          column_precision,
                          column_scale,
-                          is_nullable,is_key)
+                          is_nullable,is_key,is_indexed)
 
   SELECT
     'col1',
@@ -238,7 +238,7 @@ INSERT INTO test_col_type (column_name,
     0,
     0,
      0,
-    1
+    1,1
   UNION ALL
   SELECT
     'col2',
@@ -247,7 +247,7 @@ INSERT INTO test_col_type (column_name,
     0,
     0,
 
-1,0;
+1,0,0;
 
 
 CREATE OR REPLACE FUNCTION ore_config.testcursor(refcursor)
@@ -292,10 +292,10 @@ declare
 sqlv text;
 BEGIN
   open xxx;
-  LOOP --начинаем цикл по курсору
- --извлекаем данные из строки и записываем их в переменные
+  LOOP
+
  FETCH xxx INTO r;
- --если такого периода и не возникнет, то мы выходим
+
  IF NOT FOUND THEN EXIT;END IF;
   select ore_config.fn_test(r) into sqlv;
   RAISE NOTICE '%', sqlv;
@@ -445,15 +445,77 @@ FROM dv_config_dv_create_hub(
     'N'
 );
 
-create table DV.customer (
-  h_customer_key serial primary key,
-  dv_record_source varchar(50),
-  dv_load_date_time timestamp,
-  CustomerID varchar(30) );
+create table DV.h_customer
+(
+h_customer_key serial primary key,
+dv_record_source varchar(50),
+dv_load_date_time timestamp,
+CustomerID varchar(30)
+);
+create unique index ux_h_customer_30f9c8ee_c8ba_4e21_ac25_f04de527783c
+ on DV.h_customer
+(CustomerID
+);
+
+
+
+
+
+
 
 
 -- add index test
 
 -- add drop if recreate
+
+
+
+-- generate uuid_generate_v4()
+
+select gen_random_uuid()::text -- uuid_generate_v4();
+
+-- To see what extensions are already installed in your Postgres, run this SQL:
+
+  select * from pg_extension;
+
+-- To see if the "uuid-ossp" extension is available, run this SQL:
+  select * from pg_available_extensions;
+
+-- To install/load the extension, run this SQL:
+  CREATE EXTENSION "uuid-ossp";
+
+select * from information_schema.table_constraints;
+
+
+select E'bla bla bla \n enter';
+
+SET search_path TO ore_config;
+
+select public.uuid_generate_v4();
+
+
+select * from public.dv_defaults;
+
+
+SELECT CASE
+         WHEN default_subtype = 'prefix'
+           THEN default_varchar || 'customer'
+         WHEN default_subtype = 'suffix'
+           THEN 'customer' || default_varchar
+         END
+  -- INTO result_v
+  FROM dv_defaults
+  WHERE 1 = 1
+        AND default_type = 'hub'
+        AND default_subtype IN ('prefix', 'suffix');
+
+SET search_path = ore_config;
+CREATE EXTENSION "uuid-ossp";
+
+
+select * from dv_default_column
+
+
+
 
 

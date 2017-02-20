@@ -557,8 +557,11 @@ CREATE TYPE dv_column_type AS
   column_precision INT ,
   column_scale     INT ,
   is_nullable int,
-  is_key int
+  is_key int,
+  is_indexed int
 );
+
+drop type dv_column_type CASCADE ;
 
 -- column definition function
 
@@ -618,19 +621,22 @@ CREATE OR REPLACE FUNCTION dv_config_dv_table_create(
   object_columns_in REFCURSOR,
   recreate_flag_in  CHAR(1) = 'N'
 )
-  RETURNS INT AS
+  RETURNS TEXT AS
 $BODY$
 DECLARE
-  rowcount_v    INT :=0;
-  sql_create_v  TEXT;
-  sql_key_v     TEXT;
-  sql_col_def_v TEXT;
-  sql_index_v   TEXT;
-  sql_drop_v    TEXT;
-  crlf_v        CHAR(10) :=' ';
-  delimiter_v   CHAR(2) :=',';
-  cnt_rec_v     INT;
-  rec           dv_column_type;
+  rowcount_v         INT :=0;
+  sql_create_v       TEXT;
+  sql_key_v          TEXT;
+  sql_col_def_v      TEXT;
+  sql_index_v        TEXT :='';
+  sql_drop_v         TEXT :='';
+  crlf_v             CHAR(10) :=' ';
+  delimiter_v        CHAR(2) :=',';
+  newline_v          CHAR(3) :=E'\n';
+  cnt_rec_v          INT;
+  rec                dv_column_type;
+  i                  INT :=0;
+  sql_create_index_v TEXT;
 
 BEGIN
 
@@ -658,29 +664,35 @@ BEGIN
     RETURN rowcount_v;
   END IF;
 
-  -- check if object already exists
+  /*-- check if object already exists
 
   SELECT count(*)
   INTO rowcount_v
   FROM information_schema.tables t
   WHERE t.table_schema = object_schema_in AND t.table_name = object_name_in;
 
+*/
+
   -- if recreate flag set to Yes then drop / the same if set to No and object exists
 
-  IF recreate_flag_in = 'Y' OR (recreate_flag_in = 'N' AND rowcount_v = 1)
+  IF recreate_flag_in = 'Y'  -- OR (recreate_flag_in = 'N' AND rowcount_v = 1)
   THEN
     IF rowcount_v = 1
     THEN
-      sql_drop_v:='DROP TABLE ' || object_schema_in || '.' || object_name_in;
-    ELSE
-      RAISE NOTICE 'Can not drop table, object does not exist  --> %', object_schema_in || '.' || object_name_in;
-      RETURN rowcount_v;
+      sql_drop_v:='DROP TABLE ' || object_schema_in || '.' || object_name_in || ';' || newline_v;
+      /*  ELSE
+          RAISE NOTICE 'Can not drop table, object does not exist  --> %', object_schema_in || '.' || object_name_in;
+          RETURN rowcount_v;*/
     END IF;
 
   END IF;
 
   -- build create statement
-  sql_create_v:='create table ' || object_schema_in || '.' || object_name_in || ' (';
+  sql_create_v:='create table ' || object_schema_in || '.' || object_name_in || newline_v || '(' || newline_v;
+  sql_create_index_v:=
+  'create unique index ux_' || object_name_in || '_' || public.uuid_generate_v4() || newline_v || ' on ' ||
+   object_schema_in || '.' ||object_name_in || newline_v || '(';
+  sql_create_index_v:=replace(sql_create_index_v,'-','_');
 
   -- column definitions
   -- open cursor
@@ -694,16 +706,31 @@ BEGIN
     SELECT fn_build_column_definition(rec)
     INTO sql_col_def_v;
 
-    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v;
+    sql_create_v:=sql_create_v || crlf_v || sql_col_def_v || crlf_v || delimiter_v || newline_v;
+
+    -- add index
+    IF rec.is_indexed = 1
+    THEN
+      sql_create_index_v:=sql_create_index_v || rec.column_name || delimiter_v;
+      i:=i + 1;
+    END IF;
 
     RAISE NOTICE '%', rec;
   END LOOP;
 
   -- remove last comma
-  sql_create_v:=substring(sql_create_v FROM 1 FOR length(sql_create_v) - 1) || ' )';
+  sql_create_v:=substring(sql_create_v FROM 1 FOR length(sql_create_v) - 2) || newline_v || ');' || newline_v;
+
+  IF i <> 0
+  THEN
+    sql_create_index_v:=substring(sql_create_index_v FROM 1 FOR length(sql_create_index_v) - 1) || newline_v || ');' ||
+                        newline_v;
+    sql_create_v:=sql_create_v || sql_create_index_v;
+  END IF;
 
   RAISE NOTICE 'SQL --> %', sql_create_v;
-  RETURN rowcount_v;
+
+  RETURN sql_drop_v || sql_create_v;
 END
 $BODY$
 LANGUAGE plpgsql;
@@ -741,7 +768,8 @@ BEGIN
               ELSE 1 END             AS is_nullable,
               CASE WHEN d.object_column_type = 'Object_Key'
                 THEN 1
-              ELSE 0 END             AS is_key
+              ELSE 0 END             AS is_key,
+             d.is_indexed
             FROM dv_default_column d
             WHERE object_type = object_type_in
             ORDER BY is_key DESC) LOOP
@@ -766,6 +794,10 @@ DECLARE
   rowcount_v         INT :=0;
   sql_v              TEXT;
   sql_create_table_v TEXT;
+  sql_create_index_v TEXT;
+  newline_v char(3):=E'\n';
+  hub_name_v varchar(200);
+  col_index_v record;
     rec CURSOR FOR SELECT *
                    FROM fn_get_dv_object_default_columns(object_name_in, 'hub')
                    UNION ALL
@@ -776,7 +808,8 @@ DECLARE
                      hkc.hub_key_column_precision AS column_precision,
                      hkc.hub_key_column_scale     AS column_scale,
                      1                            AS is_nullable,
-                     0                            AS is_key
+                     0                            AS is_key,
+                     1 as is_indexed
                    FROM ore_config.dv_hub h
                      INNER JOIN ore_config.dv_hub_key_column hkc
                        ON h.hub_key = hkc.hub_key
@@ -785,32 +818,12 @@ DECLARE
                          AND h.owner_key = object_owner_key_in;
 BEGIN
 
-  -- check parameters if object already exists
-
-  SELECT count(*)
-  INTO rowcount_v
-  FROM information_schema.tables t
-  WHERE t.table_schema = object_schema_in AND t.table_name = object_name_in;
-
-  -- recreate hub if needed
-
-  IF recreate_flag_in = 'Y' OR (recreate_flag_in = 'N' AND rowcount_v = 1)
-  THEN
-    IF rowcount_v = 1
-    THEN
-      sql_v:='DROP TABLE ' || object_schema_in || '.' || object_name_in || '; ';
-    ELSE
-      RAISE NOTICE 'Can not drop table, object does not exist  --> %', object_schema_in || '.' || object_name_in;
-      RETURN rowcount_v;
-    END IF;
-
-  END IF;
-
-
   OPEN rec;
   -- get create statement
 
-  SELECT ore_config.dv_config_dv_table_create(object_name_in,
+  hub_name_v:=fn_get_object_name(object_name_in,'hub');
+
+  SELECT ore_config.dv_config_dv_table_create(hub_name_v,
                                               object_schema_in,
                                               'rec',
                                               recreate_flag_in
@@ -819,11 +832,6 @@ BEGIN
 
   CLOSE rec;
 
-  -- add index
-
-
-  -- execute script
-
 
   RETURN sql_create_table_v;
 
@@ -831,6 +839,98 @@ END
 $BODY$
 LANGUAGE 'plpgsql';
 
+
+
+-- dv_defaults
+CREATE TABLE ore_config.dv_defaults (LIKE
+  public.dv_defaults EXCLUDING CONSTRAINTS);
+
+
+
+
+
+CREATE SEQUENCE dv_defaults_key_seq START 1;
+CREATE TABLE ore_config.dv_defaults
+(
+    default_key INTEGER DEFAULT nextval('dv_defaults_key_seq'::regclass) PRIMARY KEY NOT NULL,
+    default_type VARCHAR(50) NOT NULL,
+    default_subtype VARCHAR(50) NOT NULL,
+    default_sequence INTEGER NOT NULL,
+    data_type VARCHAR(50) NOT NULL,
+    default_integer INTEGER,
+    default_varchar VARCHAR(128),
+    default_datetime TIMESTAMP,
+    owner_key integer not null,
+    release_key INTEGER NOT NULL,
+    version_number INTEGER DEFAULT 1 NOT NULL,
+    updated_by VARCHAR(50) DEFAULT "current_user"() NOT NULL,
+    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    CONSTRAINT fk_dv_defaults_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+    CONSTRAINT fk_dv_defaults_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
+);
+CREATE UNIQUE INDEX dv_defaults_unq ON dv_defaults (owner_key, default_type, default_subtype);
+
+INSERT INTO ore_config.dv_defaults (default_type,
+                                    default_subtype,
+                                    default_sequence,
+                                    data_type,
+                                    default_integer,
+                                    default_varchar,
+                                    default_datetime, owner_key, release_key)
+  SELECT
+    CASE WHEN lower(default_type) = 'lnk'
+      THEN 'link'
+    ELSE lower(default_type) END,
+    lower(default_subtype),
+    default_sequence,
+    lower(data_type),
+    default_integer,
+    CASE WHEN lower(default_varchar) = 'lnk'
+      THEN 'link'
+    ELSE lower(default_varchar) END,
+    default_datetime,
+    2,
+    4
+  FROM public.dv_defaults;
+
+-- get object name
+
+CREATE OR REPLACE FUNCTION fn_get_object_name
+  (
+      object_name_in VARCHAR(256)
+    , object_type_in VARCHAR(50)
+  )
+  RETURNS VARCHAR(256)
+AS
+$BODY$
+DECLARE result_v VARCHAR(256);
+BEGIN
+  SELECT CASE
+         WHEN default_subtype = 'prefix'
+           THEN default_varchar || object_name_in
+         WHEN default_subtype = 'suffix'
+           THEN object_name_in || default_varchar
+         END
+  INTO result_v
+  FROM dv_defaults
+  WHERE 1 = 1
+        AND default_type = object_type_in
+        AND default_subtype IN ('prefix', 'suffix');
+
+  RETURN result_v;
+END
+$BODY$
+LANGUAGE 'plpgsql';
+
+-- add indexed column
+
+ALTER TABLE ore_config.dv_default_column
+  ADD is_indexed INT DEFAULT 0 NOT NULL;
+
+/*
+ALTER TABLE ore_config.dv_hub_key_column
+  ADD is_indexed INT DEFAULT 1 NOT NULL;
+  */
 
 
 
