@@ -513,9 +513,79 @@ SET search_path = ore_config;
 CREATE EXTENSION "uuid-ossp";
 
 
-select * from dv_default_column
+-- insert satellite data
+select * from dv_hub;
+
+SELECT dv_config_object_insert('dv_satellite',
+                               '{{"satellite_name","customer_detail"},{"satellite_schema","DV"},
+                               {"hub_key","2"},
+                               {"link_hub_satellite_flag","H"},
+                               {"release_number","0"},{"owner_key","2"}}');
+
+select * from dv_satellite;
+
+-- add source system
+SELECT dv_config_object_insert('dv_source_system',
+                               '{{"source_system_name","test_system"},{"source_system_schema","DV"},
+                                {"release_number","0"},{"owner_key","2"}}');
+select * from dv_source_system;
+
+-- add stage table
+SELECT dv_config_object_insert('dv_stage_table',
+                               '{{"system_key","1"},{"stage_table_schema","DV"},{"stage_table_name","customer_info"},
+                                {"release_number","0"},{"owner_key","2"}}');
+-- add stage table columns
+select * from dv_stage_table;
+
+SELECT dv_config_object_insert('dv_stage_table_column',
+                               '{{"stage_table_key","1"},{"column_name","CustomerID"},
+                               {"column_type","varchar"},
+                               {"column_length","30"},
+                               {"column_precision","0"},
+                               {"column_scale","0"},{"source_ordinal_position","1"},
+                               {"release_number","0"},{"owner_key","2"}}');
+
+SELECT dv_config_object_insert('dv_stage_table_column',
+                               '{{"stage_table_key","1"},{"column_name","last_name"},
+                               {"column_type","varchar"},
+                               {"column_length","50"},
+                               {"column_precision","0"},
+                               {"column_scale","0"},{"source_ordinal_position","2"},
+                               {"release_number","0"},{"owner_key","2"}}');
+
+SELECT dv_config_object_insert('dv_stage_table_column',
+                               '{{"stage_table_key","1"},{"column_name","first_name"},
+                               {"column_type","varchar"},
+                               {"column_length","50"},
+                               {"column_precision","0"},
+                               {"column_scale","0"},{"source_ordinal_position","3"},
+                               {"release_number","0"},{"owner_key","2"}}');
+
+SELECT dv_config_object_insert('dv_stage_table_column',
+                               '{{"stage_table_key","1"},{"column_name","phone_number"},
+                               {"column_type","varchar"},
+                               {"column_length","50"},
+                               {"column_precision","0"},
+                               {"column_scale","0"},{"source_ordinal_position","4"},
+                               {"release_number","0"},{"owner_key","2"}}');
+
+select * from dv_stage_table_column;
+
+-- add linking with stage_table
+SELECT dv_config_object_insert('dv_satellite_column',
+                               '{{"satellite_key","1"},{"column_key","2"},
+                                {"release_number","0"},{"owner_key","2"}}');
+
+SELECT dv_config_object_insert('dv_satellite_column',
+                               '{{"satellite_key","1"},{"column_key","3"},
+                                {"release_number","0"},{"owner_key","2"}}');
+
+SELECT dv_config_object_insert('dv_satellite_column',
+                               '{{"satellite_key","1"},{"column_key","4"},
+                                {"release_number","0"},{"owner_key","2"}}');
 
 
+SELECT * FROM fn_get_dv_object_default_columns('customer_detail', 'satellite');
 
 
 
