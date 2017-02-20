@@ -441,7 +441,7 @@ SELECT *
 FROM dv_config_dv_create_hub(
     'customer',
     'DV',
-    2,
+ --   2,
     'N'
 );
 
@@ -586,6 +586,112 @@ SELECT dv_config_object_insert('dv_satellite_column',
 
 
 SELECT * FROM fn_get_dv_object_default_columns('customer_detail', 'satellite');
+
+
+select * from dv_default_column;
+
+select fn_get_object_name('customer_detail','satsurrogate');
+
+select * from dv_defaults;
+
+select fn_get_object_name(:object_name_in,'hub');
+
+-- satellite columns
+SELECT *                   FROM fn_get_dv_object_default_columns(:object_name_in, 'satellite')
+
+                   UNION ALL
+SELECT
+                     stc.column_name      AS column_name,
+                     stc.column_type      AS column_type,
+                     stc.column_length    AS column_length,
+                     stc.column_precision AS column_precision,
+                     stc.column_scale     AS column_scale,
+                     1                            AS is_nullable,
+                     0                            AS is_key,
+                     0 as is_indexed
+
+                   FROM ore_config.dv_satellite s
+                     INNER JOIN ore_config.dv_satellite_column sc
+                       ON s.satellite_key = sc.satellite_key
+                     join dv_stage_table_column stc on sc.column_key=stc.column_key
+                   WHERE s.satellite_schema = :object_schema_in
+                         AND s.satellite_name = :object_name_in;
+
+SELECT *                   FROM fn_get_dv_object_default_columns(:object_name_in, 'hub','Object_Key');
+
+SELECT
+  column_name,
+  column_type,
+  column_length,
+  column_precision,
+  column_scale,
+  1 AS is_nullable,
+  0 AS is_key,
+  1 AS is_indexed
+FROM fn_get_dv_object_default_columns(:object_name_in, 'hub', 'Object_Key');
+
+
+-- select l.hub_name from dv_satellite s join dv_link l on s.link_key=h.link_key and
+
+SELECT *
+FROM dv_config_dv_create_satellite(
+    'customer_detail',
+    'DV',
+    'H',
+    'N'
+);
+
+SELECT *
+                   FROM fn_get_dv_object_default_columns(:object_name_in, 'satellite')
+                   UNION ALL
+                   -- get hub surrogate key columns
+                   SELECT
+                     column_name,
+                     column_type,
+                     column_length,
+                     column_precision,
+                     column_scale,
+                     1 AS is_nullable,
+                     0 AS is_key,
+                     1 AS is_indexed
+                   FROM fn_get_dv_object_default_columns(:hub_name_v, 'hub', 'Object_Key')
+                   UNION ALL
+                   SELECT
+                     stc.column_name      AS column_name,
+                     stc.column_type      AS column_type,
+                     stc.column_length    AS column_length,
+                     stc.column_precision AS column_precision,
+                     stc.column_scale     AS column_scale,
+                     1                    AS is_nullable,
+                     0                    AS is_key,
+                     0                    AS is_indexed
+
+                   FROM ore_config.dv_satellite s
+                     INNER JOIN ore_config.dv_satellite_column sc
+                       ON s.satellite_key = sc.satellite_key
+                     JOIN dv_stage_table_column stc ON sc.column_key = stc.column_key
+                   WHERE s.satellite_schema = :object_schema_in
+                         AND s.satellite_name = :object_name_in
+
+
+create table DV.s_customer_detail
+(
+s_customer_detail_key serial primary key,
+dv_row_is_current bit,
+dv_is_tombstone bit,
+dv_record_source varchar(50),
+dv_rowenddate timestamp,
+dv_rowstartdate timestamp,
+dv_source_date_time timestamp,
+h_customer_key int,
+last_name varchar(50),
+first_name varchar(50),
+phone_number varchar(50)
+);
+create unique index ux_s_customer_detail_34439caf_a04c_4d8a_87bf_8dbe2e705292
+ on DV.s_customer_detail
+(dv_rowstartdate,h_customer_key
+);
 
 
 

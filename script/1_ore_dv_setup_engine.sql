@@ -738,7 +738,8 @@ LANGUAGE plpgsql;
 -- function for getting set of default columns for data vault object
 
 
-CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_name_in VARCHAR(128), object_type_in VARCHAR(128)
+CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_name_in VARCHAR(128), object_type_in VARCHAR(128),
+  object_column_type_in varchar(30) default NULL -- all or particular type
 )
   RETURNS SETOF dv_column_type AS
 $BODY$
@@ -772,6 +773,7 @@ BEGIN
              d.is_indexed
             FROM dv_default_column d
             WHERE object_type = object_type_in
+            and (d.object_column_type=object_column_type_in or object_column_type_in is null)
             ORDER BY is_key DESC) LOOP
     RETURN NEXT r;
   END LOOP;
@@ -785,7 +787,7 @@ LANGUAGE 'plpgsql';
 CREATE OR REPLACE FUNCTION dv_config_dv_create_hub(
   object_name_in      VARCHAR(128),
   object_schema_in    VARCHAR(128),
-  object_owner_key_in INT,
+  -- object_owner_key_in INT,
   recreate_flag_in    CHAR(1) = 'N'
 )
   RETURNS TEXT AS
@@ -814,7 +816,8 @@ DECLARE
                        ON h.hub_key = hkc.hub_key
                    WHERE h.hub_schema = object_schema_in
                          AND h.hub_name = object_name_in
-                         AND h.owner_key = object_owner_key_in;
+                      --   AND h.owner_key = object_owner_key_in
+  ;
 BEGIN
 
   OPEN rec;
@@ -934,10 +937,10 @@ ALTER TABLE ore_config.dv_hub_key_column
 
 -- create satellite
 CREATE OR REPLACE FUNCTION dv_config_dv_create_satellite(
-  object_name_in      VARCHAR(128),
-  object_schema_in    VARCHAR(128),
-  object_owner_key_in INT,
-  recreate_flag_in    CHAR(1) = 'N'
+  object_name_in   VARCHAR(128),
+  object_schema_in VARCHAR(128),
+  object_type_in   CHAR(1) DEFAULT 'H',
+  recreate_flag_in CHAR(1) = 'N'
 )
   RETURNS TEXT AS
 $BODY$
@@ -946,33 +949,62 @@ DECLARE
   sql_v              TEXT;
   sql_create_table_v TEXT;
   sql_create_index_v TEXT;
-  sat_name_v varchar(200);
+  sat_name_v         VARCHAR(200);
+  hub_name_v         VARCHAR(30);
 
-    rec CURSOR FOR SELECT *
-                   FROM fn_get_dv_object_default_columns(object_name_in, 'sat')
-                   UNION ALL
-                   SELECT
-                     hkc.hub_key_column_name      AS column_name,
-                     hkc.hub_key_column_type      AS column_type,
-                     hkc.hub_key_column_length    AS column_length,
-                     hkc.hub_key_column_precision AS column_precision,
-                     hkc.hub_key_column_scale     AS column_scale,
-                     1                            AS is_nullable,
-                     0                            AS is_key,
-                     1 as is_indexed
-                   FROM ore_config.dv_hub h
-                     INNER JOIN ore_config.dv_hub_key_column hkc
-                       ON h.hub_key = hkc.hub_key
-                   WHERE h.hub_schema = object_schema_in
-                         AND h.hub_name = object_name_in
-                         AND h.owner_key = object_owner_key_in;
+  -- get columns
+    rec CURSOR (hub_name VARCHAR ) FOR SELECT *
+                                       FROM fn_get_dv_object_default_columns(object_name_in, 'satellite')
+                                       UNION ALL
+                                       -- get hub surrogate key columns
+                                       SELECT
+                                         column_name,
+                                         column_type,
+                                         column_length,
+                                         column_precision,
+                                         column_scale,
+                                         1 AS is_nullable,
+                                         0 AS is_key,
+                                         1 AS is_indexed
+                                       FROM fn_get_dv_object_default_columns(hub_name, 'hub', 'Object_Key')
+                                       UNION ALL
+                                       SELECT
+                                         stc.column_name      AS column_name,
+                                         stc.column_type      AS column_type,
+                                         stc.column_length    AS column_length,
+                                         stc.column_precision AS column_precision,
+                                         stc.column_scale     AS column_scale,
+                                         1                    AS is_nullable,
+                                         0                    AS is_key,
+                                         0                    AS is_indexed
+
+                                       FROM ore_config.dv_satellite s
+                                         INNER JOIN ore_config.dv_satellite_column sc
+                                           ON s.satellite_key = sc.satellite_key
+                                         JOIN dv_stage_table_column stc ON sc.column_key = stc.column_key
+                                       WHERE s.satellite_schema = object_schema_in
+                                             AND s.satellite_name = object_name_in;
 BEGIN
 
-  OPEN rec;
+  -- it will be easy to find link name as well using the same query for column definition selection
+  -- just add 2d parameter to cursor, type of object : link or hub
+  -- find related hub name
+  SELECT h.hub_name
+  INTO hub_name_v
+  FROM dv_satellite s
+    JOIN dv_hub h ON s.hub_key = h.hub_key
+  WHERE s.satellite_name = object_name_in AND s.satellite_schema = object_schema_in
+        AND s.link_hub_satellite_flag = 'H';
 
+  -- generate satellite name
+  sat_name_v:=fn_get_object_name(object_name_in, 'sat');
+
+  RAISE NOTICE ' Sat name %-->', sat_name_v;
+  RAISE NOTICE ' Hub name %-->', hub_name_v;
+
+  OPEN rec (hub_name:=hub_name_v);
   -- create statement
-  -- generate hub name
-  sat_name_v:=fn_get_object_name(object_name_in,'sat');
+
 
   SELECT ore_config.dv_config_dv_table_create(sat_name_v,
                                               object_schema_in,
@@ -982,7 +1014,6 @@ BEGIN
   INTO sql_create_table_v;
 
   CLOSE rec;
-
 
   RETURN sql_create_table_v;
 
