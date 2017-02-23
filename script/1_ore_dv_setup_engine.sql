@@ -748,7 +748,7 @@ DECLARE
 BEGIN
 
   -- check parameter
-  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite')
+  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite','stage_table')
   THEN
     RAISE NOTICE 'Not valid object type: can be only hub, satellite --> %', object_type_in;
     RETURN;
@@ -1020,4 +1020,89 @@ BEGIN
 END
 $BODY$
 LANGUAGE 'plpgsql';
+
+-- create stage table
+-- need special default column  process status to capture
+
+SELECT *
+FROM ore_config.dv_default_column;
+
+INSERT INTO ore_config.dv_default_column (object_type, object_column_type,
+                                          column_name, column_type, release_key, owner_key)
+  SELECT
+    'stage_table',
+    'process_status',
+    'status',
+    'varchar',
+    4,
+    2;
+
+CREATE OR REPLACE FUNCTION dv_config_dv_create_stage_table(
+  object_name_in   VARCHAR(128),
+  object_schema_in VARCHAR(128),
+  -- object_owner_key_in INT,
+  recreate_flag_in CHAR(1) = 'N'
+)
+  RETURNS TEXT AS
+$BODY$
+DECLARE
+  rowcount_v         INT :=0;
+  sql_v              TEXT;
+  sql_create_table_v TEXT;
+  sql_create_index_v TEXT;
+  rec CURSOR FOR
+    SELECT *
+                   FROM fn_get_dv_object_default_columns(object_name_in, 'stage_table')
+                   UNION ALL
+                   SELECT
+                     sc.column_name,
+                     sc.column_type,
+                     sc.column_length,
+                     sc.column_precision,
+                     sc.column_scale,
+                     0 AS is_nullable,
+                     0 AS is_key,
+                     0 AS is_indexed
+                   FROM dv_stage_table t
+                     INNER JOIN dv_stage_table_column sc
+                       ON t.stage_table_key = sc.stage_table_key
+                   WHERE t.stage_table_schema = object_schema_in
+                         AND t.stage_table_name = object_name_in
+
+  ;
+BEGIN
+
+  OPEN rec;
+
+  -- create statement
+
+  SELECT ore_config.dv_config_dv_table_create(object_name_in,
+                                              object_schema_in,
+                                              'rec',
+                                              recreate_flag_in
+  )
+  INTO sql_create_table_v;
+
+  CLOSE rec;
+
+  RETURN sql_create_table_v;
+
+END
+$BODY$
+LANGUAGE 'plpgsql';
+
+select dv_config_dv_create_stage_table('customer_info','DV');
+
+
+create table DV.customer_info
+(
+status varchar(0),
+CustomerID varchar(30) NOT NULL ,
+last_name varchar(50) NOT NULL ,
+first_name varchar(50) NOT NULL ,
+phone_number varchar(50) NOT NULL
+);
+
+
+
 
