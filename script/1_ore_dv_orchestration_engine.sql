@@ -212,9 +212,8 @@ WHERE is_key = 0;
 -- dynamic upsert statement
 WITH sql AS (
   SELECT
-
-     :stage_table_schema as stage_table_schema,
-    :stage_table_name as stage_table_name,
+    :stage_table_schema AS stage_table_schema,
+    :stage_table_name   AS stage_table_name,
     stc.column_name,
     hkc.hub_key_column_name,
     H.hub_schema,
@@ -232,33 +231,55 @@ WITH sql AS (
   UNION ALL
   -- get defaults
   SELECT
-
-     :stage_table_schema,
+    :stage_table_schema,
     :stage_table_name,
     CASE WHEN column_name = 'dv_load_date_time'
       THEN 'now()'
-    ELSE '"DV.customer_info"'
+    ELSE quote_literal('DV.customer_info')
     --:stage_table_schema || '.' || :stage_table_name
     END,
-    column_name as hub_key_column_name,
+    column_name AS hub_key_column_name,
     :hub_schema,
     :hub_name
   FROM fn_get_dv_object_default_columns('customer', 'hub')
   WHERE is_key = 0
 )
-SELECT 'with src as ' || '( select ' || array_to_string(array_agg(sql.column_name), ', ')
-FROM sql
-union all
-select distinct ' from '||sql.stage_table_schema||'.'||stage_table_name||')'
-from sql
-union all
-  select 'insert into '||sql.hub_schema||'.'||sql.hub_name||'('|| array_to_string(array_agg(sql.hub_key_column_name), ', ')||')'
-  from sql
-group by sql.hub_schema,sql.hub_name
-union ALL
-  select distinct 'select * from src on conflict do nothing;'
-  from sql
+SELECT array_to_string(array_agg(t.ssql), E'\n')
+FROM (
+       SELECT 'with src as ' || '( select ' || array_to_string(array_agg(sql.column_name), ', ') AS ssql
+       FROM sql
+       UNION ALL
+       SELECT DISTINCT ' from ' || sql.stage_table_schema || '.' || stage_table_name || ')'
+       FROM sql
+       UNION ALL
+       SELECT 'insert into ' || sql.hub_schema || '.' || fn_get_object_name(sql.hub_name,'hub') || '(' ||
+              array_to_string(array_agg(sql.hub_key_column_name), ', ') || ')'
+       FROM sql
+       GROUP BY sql.hub_schema, fn_get_object_name(sql.hub_name,'hub')
+       UNION ALL
+       SELECT DISTINCT 'select * from src'||E'\n'|| 'on conflict(' || (SELECT column_name
+                                                            FROM fn_get_dv_object_default_columns(:object_name_in,
+                                                                                                  'hub',
+                                                                                                  'Object_Key')) ||
+                       ') ' || 'do nothing;' || E'\n'
+       FROM sql) t;
+
+
+WITH src AS ( SELECT
+                CustomerID,
+                'DV.customer_info',
+                now()
+              FROM DV.customer_info)
+INSERT INTO DV.h_customer (CustomerID, dv_record_source, dv_load_date_time)
+  SELECT *
+  FROM src
+ON CONFLICT (h_customer_key)
+  DO NOTHING;
 
 
 
+
+
+
+select column_name from fn_get_dv_object_default_columns(:object_name_in, 'hub','Object_Key')
 
