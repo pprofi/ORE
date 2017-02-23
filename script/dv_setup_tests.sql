@@ -458,7 +458,9 @@ create unique index ux_h_customer_30f9c8ee_c8ba_4e21_ac25_f04de527783c
 );
 
 
-
+SELECT dv_config_object_insert('dv_hub_column',
+                               '{{"hub_key_column_key","1"},{"column_key","1"},
+                                {"release_number","0"},{"owner_key","2"}}');
 
 
 
@@ -693,5 +695,7 @@ create unique index ux_s_customer_detail_34439caf_a04c_4d8a_87bf_8dbe2e705292
 (dv_rowstartdate,h_customer_key
 );
 
+SELECT * FROM dv_defaults;
 
+SELECT * from dv_default_column;
 
