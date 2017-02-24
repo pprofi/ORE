@@ -44,39 +44,7 @@ key_column_key, defaults_col,
 -- might be several sources to load into one hub table
 */
 
-CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
-  source_system_in  VARCHAR(128),
-  stage_table_schema_in VARCHAR(128),
-  stage_table_in    VARCHAR(128),
-  hub_name_in       VARCHAR(128),
-  hub_schema_in  VARCHAR(128)
-)
-  RETURNS TEXT AS
-$BODY$
-DECLARE
-  sql_block_v text;
-  sql_source_v text;
-  sql_target_v text;
-  sql_target_val_v text;
-  sql_conflict_v text;
-  sql_action_v varchar(30);
-  delimiter_v char(2):=',';
-  newline_v          CHAR(3) :=E'\n';
-  load_time_v TIMESTAMPTZ;
-BEGIN
 
-  -- code snippets
-  sql_block_v:='DO $$'||newline_v||'declare'||newline_v;
-  sql_source_v:='begin'||newline_v||'with source ('||newline_v||'select ';
-  sql_target_v:='insert into '||hub_schema_in||'.'||hub_name_in||' ';
-  sql_target_val_v:='values (';
-  sql_conflict_v:='on conflict (';
-  sql_action_v:=' do nothing;';
-
-
-END
-$BODY$
-LANGUAGE plpgsql;
 
 
 CREATE TYPE dv_column_match AS
@@ -209,6 +177,13 @@ FROM fn_get_dv_object_default_columns(:object_name_in, 'hub')
 WHERE is_key = 0;
 
 
+
+-- block structure
+
+sql_bstart_v:='do $$'||E'\n' || 'begin'||E'\n';
+sql_trans_v:='';
+sql_bend_v:=E'\n'||' end$$;'
+
 -- dynamic upsert statement
 WITH sql AS (
   SELECT
@@ -216,6 +191,7 @@ WITH sql AS (
     :stage_table_name   AS stage_table_name,
     stc.column_name,
     hkc.hub_key_column_name,
+    hkc.hub_key_column_type as column_type,
     H.hub_schema,
     H.hub_name
   FROM dv_stage_table st
@@ -239,6 +215,7 @@ WITH sql AS (
     --:stage_table_schema || '.' || :stage_table_name
     END,
     column_name AS hub_key_column_name,
+    column_type,
     :hub_schema,
     :hub_name
   FROM fn_get_dv_object_default_columns('customer', 'hub')
@@ -246,7 +223,7 @@ WITH sql AS (
 )
 SELECT array_to_string(array_agg(t.ssql), E'\n')
 FROM (
-       SELECT 'with src as ' || '( select ' || array_to_string(array_agg(sql.column_name), ', ') AS ssql
+       SELECT 'with src as ' || '( select ' || array_to_string(array_agg('cast('||sql.column_name||' as '||sql.column_type||')'), ', ') AS ssql
        FROM sql
        UNION ALL
        SELECT DISTINCT ' from ' || sql.stage_table_schema || '.' || stage_table_name || ')'
@@ -264,11 +241,11 @@ FROM (
                        ') ' || 'do nothing;' || E'\n'
        FROM sql) t;
 
-
+/*
 WITH src AS ( SELECT
-                CustomerID,
-                'DV.customer_info',
-                now()
+                cast(CustomerID AS VARCHAR),
+                cast('DV.customer_info' AS VARCHAR),
+                cast(now() AS TIMESTAMP)
               FROM DV.customer_info)
 INSERT INTO DV.h_customer (CustomerID, dv_record_source, dv_load_date_time)
   SELECT *
@@ -278,8 +255,90 @@ ON CONFLICT (h_customer_key)
 
 
 
+SELECT array_to_string(array_agg('cast(' || quote_literal(column_name) || ' as ' || column_type || ')'), ', ') FROM
+                       fn_get_dv_object_default_columns(:object_name_in, 'hub');
+
+*/
+
+CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
+  stage_table_schema_in VARCHAR(128),
+  stage_table_name_in   VARCHAR(128),
+  hub_schema_in         VARCHAR(128),
+  hub_name_in           VARCHAR(128)
+)
+  RETURNS TEXT AS
+$BODY$
+DECLARE
+  sql_block_start_v TEXT;
+  sql_block_end_v   TEXT;
+  sql_block_body_v  TEXT;
+  delimiter_v       CHAR(2) :=',';
+  newline_v         CHAR(3) :=E'\n';
+  load_time_v       TIMESTAMPTZ;
+BEGIN
 
 
+  -- code snippets
+  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+  sql_block_end_v:=newline_v || 'end$$;';
 
-select column_name from fn_get_dv_object_default_columns(:object_name_in, 'hub','Object_Key')
+  -- dynamic upsert statement
+  WITH sql AS (
+    SELECT
+      stc.column_name            stage_col_name,
+      hkc.hub_key_column_name    hub_col_name,
+      hkc.hub_key_column_type AS column_type
+    FROM dv_stage_table st
+      JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
+      JOIN dv_hub_column hc ON hc.column_key = stc.column_key
+      JOIN dv_hub_key_column hkc ON hc.hub_key_column_key = hkc.hub_key_column_key
+      JOIN dv_hub H ON hkc.hub_key = H.hub_key
+    WHERE COALESCE(stc.is_retired, CAST(0 AS BOOLEAN)) <> CAST(1 AS BOOLEAN)
+          AND stage_table_schema = stage_table_schema_in
+          AND stage_table_name = stage_table_name_in
+          AND h.hub_name = hub_name_in
+          AND H.hub_schema = hub_schema_in
+          AND st.owner_key = h.owner_key
+    UNION ALL
+    -- get defaults
+    SELECT
+      CASE WHEN column_name = 'dv_load_date_time'
+        THEN 'now()'
+      ELSE quote_literal(stage_table_schema_in || '.' || stage_table_name_in)
+      END         AS stage_col_name,
+      column_name AS hub_col_name,
+      column_type
+    FROM fn_get_dv_object_default_columns('customer', 'hub')
+    WHERE is_key = 0
+  )
+  SELECT array_to_string(array_agg(t.ssql), E'\n')
+  FROM (
+         SELECT 'with src as ' || '( select ' ||
+                array_to_string(array_agg('cast(' || sql.stage_col_name || ' as ' || sql.column_type || ')'),
+                                ', ') AS ssql
+         FROM sql
+         UNION ALL
+         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ')'
+         FROM sql
+         UNION ALL
+         SELECT 'insert into ' || hub_schema_in || '.' || fn_get_object_name(hub_name_in, 'hub') || '(' ||
+                array_to_string(array_agg(sql.hub_col_name), ', ') || ')'
+         FROM sql
+         -- GROUP BY sql.hub_schema, fn_get_object_name(sql.hub_name, 'hub')
+         UNION ALL
+         SELECT DISTINCT 'select * from src' || E'\n' || 'on conflict(' || (SELECT column_name
+                                                                            FROM fn_get_dv_object_default_columns(
+                                                                                hub_name_in,
+                                                                                'hub',
+                                                                                'Object_Key')) ||
+                         ') ' || 'do nothing;' || E'\n'
+         FROM sql) t
+  INTO sql_block_body_v;
+
+  RETURN sql_block_start_v || sql_block_body_v || sql_block_end_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
 

@@ -218,73 +218,25 @@ select t.*, row_number() over(partition by ids ) as rn from dv.source t) S
 where s.rn=1;
 
 
-
------------------------------------------------------
-
-CREATE TABLE dv.account
-(
-  id bigserial,
-  name varchar,
-  surname varchar,
-  address varchar,
-  PRIMARY KEY (id),
-  CONSTRAINT unique_person UNIQUE (name, surname, address)
+-- load hub
+select dv_config_dv_load_hub(
+  'DV',
+  'customer_info',
+  'DV',
+  'customer'
 );
 
-select * from dv.account;
+DO $$
+BEGIN
+  WITH src AS ( SELECT
+                  cast(CustomerID AS VARCHAR),
+                  cast('DV.customer_info' AS VARCHAR),
+                  cast(now() AS TIMESTAMP)
+                FROM DV.customer_info)
+  INSERT INTO DV.h_customer (CustomerID, dv_record_source, dv_load_date_time)
+    SELECT *
+    FROM src
+  ON CONFLICT (h_customer_key)
+    DO NOTHING;
 
-INSERT INTO dv.account (id, name, surname, address)
-VALUES (1, 'Вася', 'Пупкин', 'Москва, Кремль')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO dv.account (id, name, surname, address)
-VALUES (DEFAULT, 'Вася', 'Пупкин', 'Москва, Кремль')
-ON CONFLICT (name, surname, address) DO NOTHING;
-
-
-INSERT INTO dv.account (id, name, surname, address)
-VALUES (DEFAULT, 'Вася', 'Пупкин', 'Москва, Кремль')
-ON CONFLICT ON CONSTRAINT unique_person DO NOTHING;
-
-
-INSERT INTO dv.account (id, name, surname, address)
-VALUES (DEFAULT, 'Вася', 'Пупкин', 'Москва, Кремль')
-ON CONFLICT (name,surname, address) WHERE name='Вася' DO NOTHING
-returning *;
-
-INSERT INTO dv.account (id, name, surname, address)
-VALUES (1, 'Петя', 'Петров', 'Москва, Кремль')
-ON CONFLICT (id)
-DO UPDATE SET
-name='Петя',
-surname='Петров';
-
-INSERT INTO dv.account AS a (id, name, surname, address)
-VALUES (1, 'Вася', 'Пупкин', 'Москва, Кремль')
-ON CONFLICT (id) DO UPDATE SET
-name=EXCLUDED.name
-WHERE a.name not like '%Кремль%';
-
-
-WITH s AS (SELECT
-             1                AS id,
-             'Вася'           AS name,
-             'Пупкин'         AS surname,
-             'Москва, Кремль' AS address)
-INSERT INTO dv.account (id, name, surname, address)
-  SELECT
-    s.id,
-    s.name,
-    s.surname,
-    s.address
-  FROM s
-ON CONFLICT (id)
-  WHERE name = 'Петя'
-  DO UPDATE SET name = s.name
-
-returning *;
-
-BEGIN;
-LOCK TABLE spider_count IN SHARE ROW EXCLUSIVE MODE;
-WITH upsert AS ($upsert RETURNING *) $insert WHERE NOT EXISTS (SELECT * FROM upsert);
-COMMIT;
+END$$;

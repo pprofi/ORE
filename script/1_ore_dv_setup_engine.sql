@@ -1037,6 +1037,26 @@ INSERT INTO ore_config.dv_default_column (object_type, object_column_type,
     4,
     2;
 
+INSERT INTO ore_config.dv_default_column (object_type, object_column_type,
+                                          column_name, column_type, release_key, owner_key)
+  SELECT
+    'stage_table',
+    'process_status',
+    'status',
+    'varchar',
+    4,
+    2;
+
+INSERT INTO ore_config.dv_default_column (object_type, object_column_type,
+                                          column_name, column_type, release_key, owner_key)
+  SELECT
+    'stage_table',
+    'Load_Date_Time',
+    'dv_load_datetime',
+    'timestamp',
+    4,
+    2;
+
 CREATE OR REPLACE FUNCTION dv_config_dv_create_stage_table(
   object_name_in   VARCHAR(128),
   object_schema_in VARCHAR(128),
@@ -1091,17 +1111,9 @@ END
 $BODY$
 LANGUAGE 'plpgsql';
 
-select dv_config_dv_create_stage_table('customer_info','DV');
+-- select dv_config_dv_create_stage_table('customer_info','DV');
 
 
-create table DV.customer_info
-(
-status varchar(0),
-CustomerID varchar(30) NOT NULL ,
-last_name varchar(50) NOT NULL ,
-first_name varchar(50) NOT NULL ,
-phone_number varchar(50) NOT NULL
-);
 
 
 
