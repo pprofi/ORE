@@ -11,6 +11,7 @@ SET search_path TO ore_config;
 
 -- update dates into defaults
 
+
 CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
   stage_table_schema_in VARCHAR(128),
   stage_table_name_in   VARCHAR(128),
@@ -20,20 +21,34 @@ CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
   RETURNS TEXT AS
 $BODY$
 DECLARE
-  sql_block_start_v TEXT;
-  sql_block_end_v   TEXT;
-  sql_block_body_v  TEXT;
-  delimiter_v       CHAR(2) :=',';
-  newline_v         CHAR(3) :=E'\n';
-  load_time_v       TIMESTAMPTZ;
+  sql_block_start_v    TEXT;
+  sql_block_end_v      TEXT;
+  sql_block_body_v     TEXT;
+  sql_process_start_v  TEXT;
+  sql_process_finish_v TEXT;
+  delimiter_v          CHAR(2) :=',';
+  newline_v            CHAR(3) :=E'\n';
+  load_time_v          TIMESTAMPTZ;
 BEGIN
-
+/*-----TO DO add error handling generation if load failed checks on counts 
+  */
 
   -- code snippets
   sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
   sql_block_end_v:=newline_v || 'end$$;';
 
+  -- update processing status stage
+  sql_process_start_v:=
+  'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' || quote_literal('PROCESSING') ||
+  ' where status=' ||
+  quote_literal('RAW')||';'||newline_v;
+  sql_process_finish_v:=
+  newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
+  quote_literal('PROCESSED') || ' where status=' ||
+  quote_literal('PROCESSING')||';'||newline_v;
+
   -- dynamic upsert statement
+  -- add process status select-update in transaction
   WITH sql AS (
     SELECT
       stc.column_name            stage_col_name,
@@ -69,7 +84,8 @@ BEGIN
                                 ', ') AS ssql
          FROM sql
          UNION ALL
-         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ')'
+         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where status=' ||
+                         quote_literal('PROCESSING') || ')'
          FROM sql
          UNION ALL
          SELECT 'insert into ' || hub_schema_in || '.' || fn_get_object_name(hub_name_in, 'hub') || '(' ||
@@ -86,10 +102,45 @@ BEGIN
          FROM sql) t
   INTO sql_block_body_v;
 
-  RETURN sql_block_start_v || sql_block_body_v || sql_block_end_v;
+  RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
 
 END
 $BODY$
 LANGUAGE plpgsql;
 
+
+-- load satellite table
+-- full and delta load
+-- need to lookup hub keys first
+
+CREATE OR REPLACE FUNCTION dv_config_dv_load_satellite(
+  stage_table_schema_in VARCHAR(128),
+  stage_table_name_in   VARCHAR(128),
+  satellite_schema_in         VARCHAR(128),
+  satellite_name_in           VARCHAR(128),
+  load_type_in varchar(10) default 'delta'
+)
+  RETURNS TEXT AS
+$BODY$
+DECLARE
+  sql_block_start_v TEXT;
+  sql_block_end_v   TEXT;
+  sql_block_body_v  TEXT;
+  delimiter_v       CHAR(2) :=',';
+  newline_v         CHAR(3) :=E'\n';
+  load_time_v       TIMESTAMPTZ;
+BEGIN
+
+
+  -- code snippets
+  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+  sql_block_end_v:=newline_v || 'end$$;';
+
+  -- dynamic upsert statement
+
+  RETURN sql_block_start_v || sql_block_body_v || sql_block_end_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
 

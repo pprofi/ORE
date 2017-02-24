@@ -477,15 +477,24 @@ select dv_config_dv_load_hub(
 
 DO $$
 BEGIN
+  UPDATE DV.customer_info
+  SET status = 'PROCESSING'
+  WHERE status = 'RAW';
+
   WITH src AS ( SELECT
                   cast(CustomerID AS VARCHAR),
                   cast('DV.customer_info' AS VARCHAR),
                   cast(now() AS TIMESTAMP)
-                FROM DV.customer_info)
+                FROM DV.customer_info
+                WHERE status = 'PROCESSING')
   INSERT INTO DV.h_customer (CustomerID, dv_record_source, dv_load_date_time)
     SELECT *
     FROM src
   ON CONFLICT (h_customer_key)
     DO NOTHING;
+
+  UPDATE DV.customer_info
+  SET status = 'PROCESSED'
+  WHERE status = 'PROCESSING';
 
 END$$;
