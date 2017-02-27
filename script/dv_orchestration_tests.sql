@@ -147,13 +147,16 @@ WITH src AS (SELECT
                k.*,
                1     AS is_current,
                now() AS dv_change
-             FROM dv.source k),
+             FROM dv.source k
+      except select id, description,cnt, is_current, now()  from dv.target
+  where is_current=1
+),
     updates AS ( -- delta load
     UPDATE dv.target t
     SET is_current = 0, dv_change = now()
     FROM src
     WHERE src.ids = id AND t.is_current = 1 -- and 'delta_load'
-      --    AND (cnt <> src.ids_extra OR description <> src.ids_desc)
+          AND (cnt <> src.ids_extra OR description <> src.ids_desc)
     RETURNING src.*
   )
   /*,
@@ -663,7 +666,10 @@ SELECT array_to_string(array_agg(t.ssql), E'\n')
 FROM (
        SELECT 'with src as ' || '( select distinct ' ||
               array_to_string(
-                  array_agg('cast(' || sql.stage_col_name || ' as ' || sql.column_type || ') as ' || sql.sat_col_name),
+                  array_agg('cast(' ||(CASE WHEN sql.is_default = 1
+                    THEN ' '
+                                        ELSE ' s.' END) ||  sql.stage_col_name || ' as ' || sql.column_type || ') as ' ||
+                            sql.sat_col_name),
                   ', ') AS ssql
        FROM sql
        UNION ALL
@@ -683,7 +689,8 @@ FROM (
            array_agg(CASE WHEN sql.is_default = 0
              THEN sql.sat_col_name
                      ELSE sql.stage_col_name END),
-           ', ') || ' from ' || :satellite_schema_in || '.' || :satellite_name_in||' where '|| ' dv_row_is_current=1 ),'
+           ', ') || ' from ' || :satellite_schema_in || '.' || :satellite_name_in || ' where ' ||
+              ' dv_row_is_current=1 ),'
        FROM sql
        UNION ALL
        SELECT ' updates as ( update ' || :satellite_schema_in || '.' || :satellite_name_in
@@ -704,26 +711,23 @@ FROM (
        UNION ALL
        SELECT 'select distinct r.* from (select u.* from updates u union all select src.* from src ) r '
        UNION ALL
-       SELECT ' on conflict (' || sql.sat_col_name || ') do nothing;'
+       SELECT ' on conflict (' || sql.sat_col_name || ', dv_row_is_current' || ') where dv_row_is_current=1 do nothing;'
        FROM sql
        WHERE sql.is_surrogate_key = 1) t;
 
 
-
-
-
 WITH src AS ( SELECT DISTINCT
-                cast(CustomerID AS VARCHAR)         AS CustomerID,
-                cast(last_name AS VARCHAR)          AS last_name,
-                cast(first_name AS VARCHAR)         AS first_name,
-                cast(phone_number AS VARCHAR)       AS phone_number,
+                cast(s.CustomerID AS VARCHAR)       AS CustomerID,
+                cast(s.last_name AS VARCHAR)        AS last_name,
+                cast(s.first_name AS VARCHAR)       AS first_name,
+                cast(s.phone_number AS VARCHAR)     AS phone_number,
                 cast(1 AS BIT)                      AS dv_row_is_current,
                 cast(dv_is_tombstone AS BIT)        AS dv_is_tombstone,
                 cast('DV.customer_info' AS VARCHAR) AS dv_record_source,
                 cast('2100-01-01' AS TIMESTAMP)     AS dv_rowenddate,
                 cast(now() AS TIMESTAMP)            AS dv_rowstartdate,
                 cast(now() AS TIMESTAMP)            AS dv_source_date_time,
-                cast(h_customer_key AS INT)         AS h_customer_key
+                cast(s.h_customer_key AS INT)       AS h_customer_key
               FROM DV.customer_info AS s LEFT JOIN DV.customer AS h ON s.h_customer_key = h.h_customer_key
               WHERE s.status = 'PROCESSING'
               EXCEPT SELECT
@@ -750,6 +754,64 @@ INSERT INTO DV.customer_detail (CustomerID, last_name, first_name, phone_number,
         FROM updates u
         UNION ALL SELECT src.*
                   FROM src) r
-ON CONFLICT (h_customer_key)
+ON CONFLICT (h_customer_key, dv_row_is_current)
+  WHERE dv_row_is_current = 1
   DO NOTHING;
 
+select dv_config_dv_load_satellite(
+  'DV',
+  'customer_info',
+  'DV',
+  'customer_detail',
+  'delta'
+)
+;
+
+DO $$
+BEGIN
+  UPDATE DV.customer_info
+  SET status = 'PROCESSING'
+  WHERE status = 'RAW';
+  WITH src AS ( SELECT DISTINCT
+                  cast(CustomerID AS VARCHAR)         AS CustomerID,
+                  cast(last_name AS VARCHAR)          AS last_name,
+                  cast(first_name AS VARCHAR)         AS first_name,
+                  cast(phone_number AS VARCHAR)       AS phone_number,
+                  cast(1 AS BIT)                      AS dv_row_is_current,
+                  cast(dv_is_tombstone AS BIT)        AS dv_is_tombstone,
+                  cast('DV.customer_info' AS VARCHAR) AS dv_record_source,
+                  cast('2100-01-01' AS TIMESTAMP)     AS dv_rowenddate,
+                  cast(now() AS TIMESTAMP)            AS dv_rowstartdate,
+                  cast(now() AS TIMESTAMP)            AS dv_source_date_time,
+                  cast(h_customer_key AS INT)         AS h_customer_key
+                FROM DV.customer_info AS s LEFT JOIN DV.h_customer AS h ON s.h_customer_key = h.h_customer_key
+                WHERE s.status = 'PROCESSING'
+                EXCEPT SELECT
+                         CustomerID,
+                         last_name,
+                         first_name,
+                         phone_number,
+                         1,
+                         dv_is_tombstone,
+                         'DV.customer_info',
+                         '2100-01-01',
+                         now(),
+                         now(),
+                         h_customer_key
+                       FROM DV.customer_detail
+                       WHERE dv_row_is_current = 1 ),
+      updates AS ( UPDATE DV.customer_detail
+    SET dv_row_is_current = 0, dv_rowenddate = now()
+    FROM src
+    WHERE h_customer_key = src.h_customer_key AND dv_row_is_current = 1 ) RETURNING src.* )
+  INSERT INTO DV.customer_detail (CustomerID, last_name, first_name, phone_number, dv_row_is_current, dv_is_tombstone, dv_record_source, dv_rowenddate, dv_rowstartdate, dv_source_date_time, h_customer_key)
+    SELECT DISTINCT r.*
+    FROM (SELECT u.*
+          FROM updates u
+          UNION ALL SELECT src.*
+                    FROM src) r;
+  UPDATE DV.customer_info
+  SET status = 'PROCESSED'
+  WHERE status = 'PROCESSING';
+
+END$$;
