@@ -666,9 +666,9 @@ SELECT array_to_string(array_agg(t.ssql), E'\n')
 FROM (
        SELECT 'with src as ' || '( select distinct ' ||
               array_to_string(
-                  array_agg('cast(' ||(CASE WHEN sql.is_default = 1
+                  array_agg('cast(' || (CASE WHEN sql.is_default = 1
                     THEN ' '
-                                        ELSE ' s.' END) ||  sql.stage_col_name || ' as ' || sql.column_type || ') as ' ||
+                                        ELSE ' s.' END) || sql.stage_col_name || ' as ' || sql.column_type || ') as ' ||
                             sql.sat_col_name),
                   ', ') AS ssql
        FROM sql
@@ -700,9 +700,23 @@ FROM (
        SELECT ' from src '
        UNION ALL
        SELECT
-         ' where ' || sql.sat_col_name || '=src.' || sql.sat_col_name || ' and dv_row_is_current=1 ) returning src.* )'
+         ' where ' || sql.sat_col_name || '=src.' || sql.sat_col_name || ' and dv_row_is_current=1  returning src.* )'
        FROM sql
        WHERE sql.is_surrogate_key = 1
+
+       UNION ALL
+       SELECT DISTINCT CASE WHEN :load_type = 'delta'
+         THEN ' '
+                       ELSE
+                         ' , deleted as ( update ' || :satellite_schema_in || '.' || :satellite_name_in
+                         ||
+                         ' as s  set s.dv_row_is_current=0,s.dv_rowenddate=now() from src  where s.' || sql.sat_col_name
+                         || '=src.' || sql.sat_col_name ||
+
+                         ' and src.hub_SK is null and s.dv_row_is_current=1 ) '
+                       END
+       FROM sql
+        where sql.is_surrogate_key = 1
        UNION ALL
        SELECT ' insert into ' || :satellite_schema_in || '.' || :satellite_name_in || '(' ||
               array_to_string(array_agg(sql.sat_col_name),
@@ -744,10 +758,15 @@ WITH src AS ( SELECT DISTINCT
                        h_customer_key
                      FROM DV.customer_detail
                      WHERE dv_row_is_current = 1 ),
-    updates AS ( UPDATE DV.customer_detail
+    updates AS (
+    UPDATE DV.customer_detail
   SET dv_row_is_current = 0, dv_rowenddate = now()
   FROM src
-  WHERE h_customer_key = src.h_customer_key AND dv_row_is_current = 1 ) RETURNING src.* )
+  WHERE h_customer_key = src.h_customer_key AND dv_row_is_current = 1
+  RETURNING src.* )
+  , deleted AS ( UPDATE DV.customer_detail AS s
+SET s.dv_row_is_current = 0, s.dv_rowenddate = now() FROM src
+WHERE sh_customer_key = src.h_customer_key AND src.hub_SK IS NULL AND s.dv_row_is_current = 1 )
 INSERT INTO DV.customer_detail (CustomerID, last_name, first_name, phone_number, dv_row_is_current, dv_is_tombstone, dv_record_source, dv_rowenddate, dv_rowstartdate, dv_source_date_time, h_customer_key)
   SELECT DISTINCT r.*
   FROM (SELECT u.*
@@ -758,32 +777,37 @@ ON CONFLICT (h_customer_key, dv_row_is_current)
   WHERE dv_row_is_current = 1
   DO NOTHING;
 
+
 select dv_config_dv_load_satellite(
   'DV',
   'customer_info',
   'DV',
   'customer_detail',
-  'delta'
+  'full'
 )
 ;
 
+-- full load
+
+-- mark as deleted all records not found in stage
 DO $$
 BEGIN
   UPDATE DV.customer_info
   SET status = 'PROCESSING'
   WHERE status = 'RAW';
   WITH src AS ( SELECT DISTINCT
-                  cast(CustomerID AS VARCHAR)         AS CustomerID,
-                  cast(last_name AS VARCHAR)          AS last_name,
-                  cast(first_name AS VARCHAR)         AS first_name,
-                  cast(phone_number AS VARCHAR)       AS phone_number,
+                  cast(s.CustomerID AS VARCHAR)       AS CustomerID,
+                  cast(s.last_name AS VARCHAR)        AS last_name,
+                  cast(s.first_name AS VARCHAR)       AS first_name,
+                  cast(s.phone_number AS VARCHAR)     AS phone_number,
                   cast(1 AS BIT)                      AS dv_row_is_current,
                   cast(dv_is_tombstone AS BIT)        AS dv_is_tombstone,
                   cast('DV.customer_info' AS VARCHAR) AS dv_record_source,
                   cast('2100-01-01' AS TIMESTAMP)     AS dv_rowenddate,
                   cast(now() AS TIMESTAMP)            AS dv_rowstartdate,
                   cast(now() AS TIMESTAMP)            AS dv_source_date_time,
-                  cast(h_customer_key AS INT)         AS h_customer_key
+                  cast(s.h_customer_key AS INT)       AS h_customer_key,
+                  h.h_customer_key                    AS hub_SK
                 FROM DV.customer_info AS s LEFT JOIN DV.h_customer AS h ON s.h_customer_key = h.h_customer_key
                 WHERE s.status = 'PROCESSING'
                 EXCEPT SELECT
@@ -797,19 +821,48 @@ BEGIN
                          '2100-01-01',
                          now(),
                          now(),
+                         h_customer_key,
                          h_customer_key
-                       FROM DV.customer_detail
+                       FROM DV.s_customer_detail
                        WHERE dv_row_is_current = 1 ),
-      updates AS ( UPDATE DV.customer_detail
-    SET dv_row_is_current = 0, dv_rowenddate = now()
+      deleted AS ( UPDATE DV.s_customer_detail AS s
+    SET s.dv_row_is_current = 0, s.dv_rowenddate = now() FROM src
+    WHERE s.CustomerID = src.CustomerID AND src.hub_SK IS NULL AND s.dv_row_is_current = 1 ),
+      updates AS ( UPDATE DV.s_customer_detail
+      AS u
+    SET u.dv_row_is_current = 0, u.dv_rowenddate = now()
     FROM src
-    WHERE h_customer_key = src.h_customer_key AND dv_row_is_current = 1 ) RETURNING src.* )
-  INSERT INTO DV.customer_detail (CustomerID, last_name, first_name, phone_number, dv_row_is_current, dv_is_tombstone, dv_record_source, dv_rowenddate, dv_rowstartdate, dv_source_date_time, h_customer_key)
+    WHERE u.h_customer_key = src.h_customer_key AND src.hub_SK IS NOT NULL AND u.dv_row_is_current = 1
+    RETURNING src.* )
+  INSERT INTO DV.s_customer_detail (CustomerID, last_name, first_name, phone_number, dv_row_is_current, dv_is_tombstone, dv_record_source, dv_rowenddate, dv_rowstartdate, dv_source_date_time, h_customer_key)
     SELECT DISTINCT r.*
-    FROM (SELECT u.*
+    FROM (SELECT
+            CustomerID,
+            last_name,
+            first_name,
+            phone_number,
+            dv_row_is_current,
+            dv_is_tombstone,
+            dv_record_source,
+            dv_rowenddate,
+            dv_rowstartdate,
+            dv_source_date_time,
+            h_customer_key
           FROM updates u
-          UNION ALL SELECT src.*
-                    FROM src) r;
+          UNION ALL SELECT
+                      CustomerID,
+                      last_name,
+                      first_name,
+                      phone_number,
+                      dv_row_is_current,
+                      dv_is_tombstone,
+                      dv_record_source,
+                      dv_rowenddate,
+                      dv_rowstartdate,
+                      dv_source_date_time,
+                      h_customer_key
+                    FROM src
+                    WHERE src.hub_SK IS NOT NULL) r;
   UPDATE DV.customer_info
   SET status = 'PROCESSED'
   WHERE status = 'PROCESSING';
