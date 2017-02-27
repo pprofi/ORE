@@ -30,7 +30,7 @@ DECLARE
   newline_v            CHAR(3) :=E'\n';
   load_time_v          TIMESTAMPTZ;
 BEGIN
-/*-----TO DO add error handling generation if load failed checks on counts 
+/*-----TO DO add error handling generation if load failed checks on counts
   */
 
   -- code snippets
@@ -74,7 +74,7 @@ BEGIN
       END         AS stage_col_name,
       column_name AS hub_col_name,
       column_type
-    FROM fn_get_dv_object_default_columns('customer', 'hub')
+    FROM fn_get_dv_object_default_columns(hub_name_in, 'hub')
     WHERE is_key = 0
   )
   SELECT array_to_string(array_agg(t.ssql), E'\n')
@@ -136,7 +136,21 @@ BEGIN
   sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
   sql_block_end_v:=newline_v || 'end$$;';
 
+  sql_process_start_v:=
+  'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' || quote_literal('PROCESSING') ||
+  ' where status=' ||
+  quote_literal('RAW')||';'||newline_v;
+  sql_process_finish_v:=
+  newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
+  quote_literal('PROCESSED') || ' where status=' ||
+  quote_literal('PROCESSING')||';'||newline_v;
+
   -- dynamic upsert statement
+
+  -- full load means that records for whose keys in staging not found will be marked as deleted
+  -- lookup keys in hub
+  -- insert records for new keys
+  -- update changed records for existing keys, insert new record with changed values
 
   RETURN sql_block_start_v || sql_block_body_v || sql_block_end_v;
 

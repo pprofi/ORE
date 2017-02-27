@@ -121,7 +121,7 @@ WITH src AS (SELECT
     SET is_current = 0, dv_change = now()
     FROM src
     WHERE src.ids = id and t.is_current=1
-          AND (cnt <> src.ids_extra OR description <> src.ids_desc)
+          --AND (cnt <> src.ids_extra OR description <> src.ids_desc          )
     RETURNING *
   )
 INSERT INTO dv.target (id, description, cnt, is_current, dv_change)
@@ -153,7 +153,7 @@ WITH src AS (SELECT
     SET is_current = 0, dv_change = now()
     FROM src
     WHERE src.ids = id AND t.is_current = 1 -- and 'delta_load'
-          AND (cnt <> src.ids_extra OR description <> src.ids_desc)
+      --    AND (cnt <> src.ids_extra OR description <> src.ids_desc)
     RETURNING src.*
   )
   /*,
@@ -178,7 +178,9 @@ WITH src AS (SELECT
     ) r
 ON CONFLICT (id, is_current) where is_current=1
   DO NOTHING;
-;
+
+
+select * from dv.target
 
 INSERT INTO dv.source
   SELECT
@@ -498,3 +500,256 @@ BEGIN
   WHERE status = 'PROCESSING';
 
 END$$;
+
+ select * from dv_defaults;
+
+select fn_get_object_name('customer','satsurrogate');
+
+-- load hub
+
+WITH src AS (SELECT
+               DISTINCT
+               k.*,
+               1     AS is_current,
+               now() AS dv_change
+             FROM dv.source k),
+    updates AS ( -- delta load
+    UPDATE dv.target t
+    SET is_current = 0, dv_change = now()
+    FROM src
+    WHERE src.ids = id AND t.is_current = 1 -- and 'delta_load'
+          AND (cnt <> src.ids_extra OR description <> src.ids_desc)
+    RETURNING src.*
+  )
+  /*,
+  deleted as (
+    -- in case of full load
+    delete -- if havent found anything
+    from dv.target
+    where
+  )
+*/
+-- select s.*, now() from  src s
+-- union ALL
+ INSERT INTO dv.target (id, description, cnt, is_current, dv_change)
+  SELECT DISTINCT r.*
+  FROM
+    (
+      SELECT u.*
+      FROM updates u
+     UNION ALL
+    SELECT *
+    FROM src
+    ) r
+ON CONFLICT (id, is_current) where is_current=1
+  DO NOTHING;
+
+SELECT
+      stc.column_name            stage_col_name,
+      hkc.hub_key_column_name    hub_col_name,
+      hkc.hub_key_column_type AS column_type
+    FROM dv_stage_table st
+      JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
+      JOIN dv_hub_column hc ON hc.column_key = stc.column_key
+      JOIN dv_hub_key_column hkc ON hc.hub_key_column_key = hkc.hub_key_column_key
+      JOIN dv_hub H ON hkc.hub_key = H.hub_key
+    WHERE COALESCE(stc.is_retired, CAST(0 AS BOOLEAN)) <> CAST(1 AS BOOLEAN)
+          AND stage_table_schema = stage_table_schema_in
+          AND stage_table_name = stage_table_name_in
+          AND h.hub_name = hub_name_in
+          AND H.hub_schema = hub_schema_in
+          AND st.owner_key = h.owner_key
+    UNION ALL
+    -- get defaults
+    SELECT
+      CASE WHEN column_name = 'dv_load_date_time'
+        THEN 'now()'
+      ELSE quote_literal(stage_table_schema_in || '.' || stage_table_name_in)
+      END         AS stage_col_name,
+      column_name AS hub_col_name,
+      column_type
+    FROM fn_get_dv_object_default_columns('customer', 'hub')
+    WHERE is_key = 0;
+
+select * from dv_satellite_column sc join dv_satellite s on s.satellite_key=sc.satellite_key ;
+
+
+
+select * from dv_default_column where object_type='satellite';
+
+SELECT
+  hkc.hub_key,
+  hkc.owner_key,
+  hkc.hub_key_column_name,
+  hc.column_key
+FROM
+  dv_hub_key_column hkc
+  LEFT JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key;
+
+-- columns from staging
+
+WITH sql AS (
+  SELECT
+    stc.column_name AS stage_col_name,
+    stc.column_name AS sat_col_name,
+    stc.column_type,
+    0               AS is_surrogate_key,
+    CASE WHEN hkc.hub_key_column_name IS NULL
+      THEN 1
+    ELSE 0 END      AS is_change_check,
+    hkc.hub_key_column_name,
+    hkc.hub_key_column_type,
+    0                  is_default
+  FROM dv_stage_table st
+    JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
+    JOIN dv_satellite_column sc ON sc.column_key = stc.column_key
+    JOIN dv_satellite s ON s.satellite_key = sc.satellite_key
+    LEFT JOIN (SELECT
+                 hkc.hub_key,
+                 hkc.owner_key,
+                 hkc.hub_key_column_name,
+                 hc.column_key,
+                 hkc.hub_key_column_type
+               FROM
+                 dv_hub_key_column hkc
+                 JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key) hkc
+      ON hkc.column_key = stc.column_key
+         AND s.hub_key = hkc.hub_key AND s.owner_key = hkc.owner_key
+  WHERE COALESCE(s.is_retired, CAST(0 AS BOOLEAN)) <> CAST(1 AS BOOLEAN)
+        AND stage_table_schema = :stage_table_schema_in
+        AND stage_table_name = :stage_table_name_in
+        AND s.satellite_name = :satellite_name_in
+        AND s.satellite_schema = :satellite_schema_in
+        AND st.owner_key = s.owner_key
+  -- default columns
+  UNION ALL
+  SELECT
+    CASE WHEN column_name IN ('dv_source_date_time', 'dv_rowstartdate', 'dv_rowstartdate')
+      THEN 'now()'
+    WHEN column_name = 'dv_record_source'
+      THEN quote_literal(:stage_table_schema_in || '.' || :stage_table_name_in)
+    WHEN column_name = 'dv_row_is_current'
+      THEN '1'
+    WHEN column_name = 'dv_rowenddate'
+      THEN quote_literal(to_date('01-01-2100 00:00:00', 'dd-mm-yyyy hh24:mi:ss'))
+    ELSE column_name
+    END         AS stage_col_name,
+    column_name AS hub_col_name,
+    column_type,
+    0,
+    0,
+    NULL,
+    NULL,
+    1
+  FROM fn_get_dv_object_default_columns(:satellite_name_in, 'satellite')
+  WHERE is_key = 0
+  -- related hub key
+  UNION ALL
+  SELECT
+    c.column_name,
+    c.column_name AS sat_col_name,
+    c.column_type,
+    1             AS is_surrogate_key,
+    0,
+    NULL,
+    NULL,
+    0
+  FROM dv_satellite s
+    JOIN dv_hub h ON h.hub_key = s.hub_key
+    JOIN fn_get_dv_object_default_columns(h.hub_name, 'hub') c ON 1 = 1
+  WHERE s.owner_key = h.owner_key
+        AND c.is_key = 1)
+SELECT array_to_string(array_agg(t.ssql), E'\n')
+FROM (
+       SELECT 'with src as ' || '( select distinct ' ||
+              array_to_string(
+                  array_agg('cast(' || sql.stage_col_name || ' as ' || sql.column_type || ') as ' || sql.sat_col_name),
+                  ', ') AS ssql
+       FROM sql
+       UNION ALL
+       SELECT DISTINCT
+         ' from ' || :stage_table_schema_in || '.' || :stage_table_name_in || ' as s left join ' || :hub_schema_in ||
+         '.' ||
+         :resolved_hub_name_in ||
+         ' as h '
+         ' on s.' || sql.sat_col_name || '=h.' || sql.sat_col_name ||
+         ' where s.status=' ||
+         quote_literal('PROCESSING')
+       FROM sql
+       WHERE sql.is_surrogate_key = 1
+       UNION ALL
+       -- except statement
+       SELECT ' except  select ' || array_to_string(
+           array_agg(CASE WHEN sql.is_default = 0
+             THEN sql.sat_col_name
+                     ELSE sql.stage_col_name END),
+           ', ') || ' from ' || :satellite_schema_in || '.' || :satellite_name_in||' where '|| ' dv_row_is_current=1 ),'
+       FROM sql
+       UNION ALL
+       SELECT ' updates as ( update ' || :satellite_schema_in || '.' || :satellite_name_in
+       UNION ALL
+       SELECT 'set dv_row_is_current=0,dv_rowenddate=now() '
+       UNION ALL
+       SELECT ' from src '
+       UNION ALL
+       SELECT
+         ' where ' || sql.sat_col_name || '=src.' || sql.sat_col_name || ' and dv_row_is_current=1 ) returning src.* )'
+       FROM sql
+       WHERE sql.is_surrogate_key = 1
+       UNION ALL
+       SELECT ' insert into ' || :satellite_schema_in || '.' || :satellite_name_in || '(' ||
+              array_to_string(array_agg(sql.sat_col_name),
+                              ', ') || ')'
+       FROM sql
+       UNION ALL
+       SELECT 'select distinct r.* from (select u.* from updates u union all select src.* from src ) r '
+       UNION ALL
+       SELECT ' on conflict (' || sql.sat_col_name || ') do nothing;'
+       FROM sql
+       WHERE sql.is_surrogate_key = 1) t;
+
+
+
+
+
+WITH src AS ( SELECT DISTINCT
+                cast(CustomerID AS VARCHAR)         AS CustomerID,
+                cast(last_name AS VARCHAR)          AS last_name,
+                cast(first_name AS VARCHAR)         AS first_name,
+                cast(phone_number AS VARCHAR)       AS phone_number,
+                cast(1 AS BIT)                      AS dv_row_is_current,
+                cast(dv_is_tombstone AS BIT)        AS dv_is_tombstone,
+                cast('DV.customer_info' AS VARCHAR) AS dv_record_source,
+                cast('2100-01-01' AS TIMESTAMP)     AS dv_rowenddate,
+                cast(now() AS TIMESTAMP)            AS dv_rowstartdate,
+                cast(now() AS TIMESTAMP)            AS dv_source_date_time,
+                cast(h_customer_key AS INT)         AS h_customer_key
+              FROM DV.customer_info AS s LEFT JOIN DV.customer AS h ON s.h_customer_key = h.h_customer_key
+              WHERE s.status = 'PROCESSING'
+              EXCEPT SELECT
+                       CustomerID,
+                       last_name,
+                       first_name,
+                       phone_number,
+                       1,
+                       dv_is_tombstone,
+                       'DV.customer_info',
+                       '2100-01-01',
+                       now(),
+                       now(),
+                       h_customer_key
+                     FROM DV.customer_detail
+                     WHERE dv_row_is_current = 1 ),
+    updates AS ( UPDATE DV.customer_detail
+  SET dv_row_is_current = 0, dv_rowenddate = now()
+  FROM src
+  WHERE h_customer_key = src.h_customer_key AND dv_row_is_current = 1 ) RETURNING src.* )
+INSERT INTO DV.customer_detail (CustomerID, last_name, first_name, phone_number, dv_row_is_current, dv_is_tombstone, dv_record_source, dv_rowenddate, dv_rowstartdate, dv_source_date_time, h_customer_key)
+  SELECT DISTINCT r.*
+  FROM (SELECT u.*
+        FROM updates u
+        UNION ALL SELECT src.*
+                  FROM src) r
+ON CONFLICT (h_customer_key)
+  DO NOTHING;
+

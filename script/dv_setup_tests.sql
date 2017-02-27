@@ -526,6 +526,7 @@ SELECT dv_config_object_insert('dv_satellite',
 
 select * from dv_satellite;
 
+select * from dv_stage_table_column;
 -- add source system
 SELECT dv_config_object_insert('dv_source_system',
                                '{{"source_system_name","test_system"},{"source_system_schema","DV"},
@@ -584,6 +585,10 @@ SELECT dv_config_object_insert('dv_satellite_column',
 
 SELECT dv_config_object_insert('dv_satellite_column',
                                '{{"satellite_key","1"},{"column_key","4"},
+                                {"release_number","0"},{"owner_key","2"}}');
+
+SELECT dv_config_object_insert('dv_satellite_column',
+                               '{{"satellite_key","1"},{"column_key","1"},
                                 {"release_number","0"},{"owner_key","2"}}');
 
 
