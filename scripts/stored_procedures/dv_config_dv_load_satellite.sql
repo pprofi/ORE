@@ -1,7 +1,3 @@
--- load satellite table
--- full and delta load
--- need to lookup hub keys first
-
 CREATE OR REPLACE FUNCTION dv_config_dv_load_satellite(
   stage_table_schema_in VARCHAR(128),
   stage_table_name_in   VARCHAR(128),
@@ -24,7 +20,28 @@ DECLARE
   hub_schema_v         VARCHAR(50);
   load_date_time_v     VARCHAR(10) :='now()';
   default_enddate_v    VARCHAR(50) :=quote_literal(to_date('01-01-2100 00:00:00', 'dd-mm-yyyy hh24:mi:ss'));
+  satellite_name_v     VARCHAR(50);
 BEGIN
+
+  -- parameters check
+  -- get related hub name
+  SELECT
+    fn_get_object_name(h.hub_name, 'hub'),
+    h.hub_schema
+  INTO
+    hub_name_v, hub_schema_v
+  FROM dv_satellite s
+    JOIN dv_hub h ON h.hub_key = s.hub_key AND h.owner_key = s.owner_key
+  WHERE s.satellite_schema = satellite_schema_in AND s.satellite_name = satellite_name_in;
+
+  -- get satellite name
+  satellite_name_v:=fn_get_object_name(satellite_name_in, 'sat');
+
+  IF COALESCE(satellite_name_v, '') = '' or COALESCE(hub_name_v, '')=''
+  THEN
+    RAISE NOTICE 'Not valid satellite name --> %', satellite_name_in;
+    RETURN ;
+  END IF;
 
   -- code snippets
   -- block
@@ -41,15 +58,7 @@ BEGIN
   quote_literal('PROCESSED') || ' where status=' ||
   quote_literal('PROCESSING') || ';' || newline_v;
 
-  -- get related hub name
-  SELECT
-    fn_get_object_name(h.hub_name, 'hub'),
-    h.hub_schema
-  INTO
-    hub_name_v, hub_schema_v
-  FROM dv_satellite s
-    JOIN dv_hub h ON h.hub_key = s.hub_key AND h.owner_key = s.owner_key
-  WHERE s.satellite_schema = satellite_schema_in AND s.satellite_name = satellite_name_in;
+
 
   -- dynamic upsert statement
   -- full load means that records for whose keys in staging not found will be marked as deleted
@@ -136,14 +145,15 @@ BEGIN
                     ', ') AS ssql
          FROM sql
          UNION ALL
-         SELECT DISTINCT
-           ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' as s left join ' || hub_schema_v ||
-           '.' ||
-           hub_name_v ||
-           ' as h '
-           ' on s.' || sql.sat_col_name || '=h.' || sql.sat_col_name ||
-           ' where s.status=' ||
-           quote_literal('PROCESSING')
+         SELECT DISTINCT ', h.' || sql.sat_col_name || ' as hub_SK ' || ' from ' || stage_table_schema_in || '.' ||
+                         stage_table_name_in
+                         || ' as s left join ' || hub_schema_v ||
+                         '.' ||
+                         hub_name_v ||
+                         ' as h '
+                         ' on s.' || sql.sat_col_name || '=h.' || sql.sat_col_name ||
+                         ' where s.status=' ||
+                         quote_literal('PROCESSING')
          FROM sql
          WHERE sql.is_surrogate_key = 1
          UNION ALL
@@ -152,31 +162,59 @@ BEGIN
              array_agg(CASE WHEN sql.is_default = 0
                THEN sql.sat_col_name
                        ELSE sql.stage_col_name END),
-             ', ') || ' from ' || satellite_schema_in || '.' || satellite_name_in || ' where ' ||
-                ' dv_row_is_current=1 ),'
+             ', ')
          FROM sql
          UNION ALL
-         -- update row if key is found
-         SELECT ' updates as ( update ' || satellite_schema_in || '.' || satellite_name_in
+         SELECT ', ' || sat_col_name || ' from ' || satellite_schema_in || '.' || satellite_name_v || ' where ' ||
+                ' dv_row_is_current=1 ),'
+         FROM sql
+         WHERE
+           sql.is_surrogate_key = 1
          UNION ALL
-         SELECT 'set dv_row_is_current=0,dv_rowenddate=' || load_date_time_v
+         -- full load - mark all keys that not found in stage as deleted
+         -- lookup key values
+         SELECT DISTINCT CASE WHEN load_type_in = 'delta'
+           THEN ' '
+                         ELSE
+                           '  deleted as ( update ' || satellite_schema_in || '.' || satellite_name_v
+                           ||
+                           ' as s  set s.dv_rowenddate=' || load_date_time_v ||
+                           ' from src  where ' ||
+                           -- list of lookup columns
+                           array_to_string(array_agg(' s.' || sql.sat_col_name || '=src.' || sql.stage_col_name),
+                                           ' and ')
+                           || ' and src.hub_SK is null and s.dv_row_is_current=1 ), '
+                         END
+         FROM sql
+         WHERE sql.hub_key_column_name IS NOT NULL
+         UNION ALL
+         -- update row if key is found
+         SELECT ' updates as ( update ' || satellite_schema_in || '.' || satellite_name_v
+         UNION ALL
+         SELECT 'as u  set u.dv_row_is_current=0,u.dv_rowenddate=' || load_date_time_v
          UNION ALL
          SELECT ' from src '
          UNION ALL
-         SELECT ' where ' || sql.sat_col_name || '=src.' || sql.sat_col_name ||
-                ' and dv_row_is_current=1 ) returning src.* )'
+         SELECT ' where u.' || sql.sat_col_name || '=src.' || sql.sat_col_name ||
+                ' and src.hub_SK is not null and u.dv_row_is_current=1 ' || E'\n returning src.* )'
          FROM sql
          WHERE sql.is_surrogate_key = 1
          UNION ALL
+
          -- if new record insert
-         SELECT ' insert into ' || satellite_schema_in || '.' || satellite_name_in || '(' ||
+         SELECT ' insert into ' || satellite_schema_in || '.' || satellite_name_v || '(' ||
                 array_to_string(array_agg(sql.sat_col_name),
                                 ', ') || ')'
          FROM sql
          UNION ALL
-         SELECT 'select distinct r.* from (select u.* from updates u union all select src.* from src ) r '
+         SELECT 'select distinct r.* from (select ' || array_to_string(array_agg(sql.sat_col_name), ', ')
+                ||
+                ' from updates u union all select ' || array_to_string(array_agg(sql.sat_col_name), ', ') ||
+                ' from src where src.hub_SK is not null ) r '
+         FROM sql
          UNION ALL
          SELECT ' ;'
+
        ) t
   INTO sql_block_body_v;
 

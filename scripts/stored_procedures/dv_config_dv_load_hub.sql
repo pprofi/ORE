@@ -14,10 +14,21 @@ DECLARE
   sql_process_finish_v TEXT;
   delimiter_v          CHAR(2) :=',';
   newline_v            CHAR(3) :=E'\n';
-  load_time_v          TIMESTAMPTZ;
+  load_date_time_v          VARCHAR(10):='now()';
+  hub_name_v varchar(50);
 BEGIN
 /*-----TO DO add error handling generation if load failed checks on counts
   */
+
+  -- hub name check
+  hub_name_v:= fn_get_object_name(hub_name_in, 'hub');
+
+  IF COALESCE(hub_name_v, '') = ''
+  THEN
+    RAISE NOTICE 'Not valid hub name --> %', hub_name_in;
+    RETURN ;
+  END IF;
+
 
   -- code snippets
   sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
@@ -32,6 +43,8 @@ BEGIN
   newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
   quote_literal('PROCESSED') || ' where status=' ||
   quote_literal('PROCESSING')||';'||newline_v;
+
+
 
   -- dynamic upsert statement
   -- add process status select-update in transaction
@@ -55,7 +68,7 @@ BEGIN
     -- get defaults
     SELECT
       CASE WHEN column_name = 'dv_load_date_time'
-        THEN 'now()'
+        THEN load_date_time_v
       ELSE quote_literal(stage_table_schema_in || '.' || stage_table_name_in)
       END         AS stage_col_name,
       column_name AS hub_col_name,
@@ -74,7 +87,7 @@ BEGIN
                          quote_literal('PROCESSING') || ')'
          FROM sql
          UNION ALL
-         SELECT 'insert into ' || hub_schema_in || '.' || fn_get_object_name(hub_name_in, 'hub') || '(' ||
+         SELECT 'insert into ' || hub_schema_in || '.' || hub_name_v || '(' ||
                 array_to_string(array_agg(sql.hub_col_name), ', ') || ')'
          FROM sql
          -- GROUP BY sql.hub_schema, fn_get_object_name(sql.hub_name, 'hub')
