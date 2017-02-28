@@ -1,0 +1,22 @@
+1,dv_col_metrics,runtype,1,varchar,NULL,weekly,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+2,global,defaultloaddatetime,1,varchar,NULL,sysdatetimeoffset(),NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+3,global,failedlookupkey,1,int,-999,NULL,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+4,global,highdate,1,datetime,NULL,NULL,9999-12-31 00:00:00.000000,2,4,1,postgres,2017-02-20 14:16:03.852395
+5,global,lowdate,1,datetime,NULL,NULL,1900-01-01 00:00:00.000000,2,4,1,postgres,2017-02-20 14:16:03.852395
+6,global,missingvalue,1,varchar,NULL,<missing>,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+7,global,navalue,1,varchar,NULL,<n/a>,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+8,global,not requiredvalue,1,varchar,NULL,<not required>,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+9,global,unknownvalue,1,varchar,NULL,<unknown>,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+10,hub,filegroup,1,varchar,NULL,primary,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+11,hub,prefix,1,varchar,NULL,h_,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+12,hub,schema,1,varchar,NULL,hub,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+13,hubsurrogate,suffix,1,varchar,NULL,_key,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+14,link,filegroup,1,varchar,NULL,primary,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+15,link,prefix,1,varchar,NULL,l_,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+16,link,schema,1,varchar,NULL,link,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+17,lnksurrogate,suffix,1,varchar,NULL,_key,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+18,sat,filegroup,1,varchar,NULL,primary,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+19,sat,prefix,1,varchar,NULL,s_,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+20,sat,schema,1,varchar,NULL,sat,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+21,satsurrogate,suffix,1,varchar,NULL,_key,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395
+22,scheduler,polldelayinseconds,1,int,30,NULL,NULL,2,4,1,postgres,2017-02-20 14:16:03.852395

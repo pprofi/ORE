@@ -1,0 +1,15 @@
+11,hub,Data_Source,3,,dv_record_source,,varchar,50,0,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+14,link,Data_Source,3,,dv_record_source,,varchar,50,0,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+17,satellite,Data_Source,4,,dv_record_source,,varchar,50,0,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+18,satellite,Current_Row,5,,dv_row_is_current,,bit,0,0,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+19,satellite,Tombstone_Indicator,6,,dv_is_tombstone,,bit,0,0,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+10,hub,Load_Date_Time,2,,dv_load_date_time,,timestamp,0,7,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+13,link,Load_Date_Time,2,,dv_load_date_time,,timestamp,0,7,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+16,satellite,Source_Date_Time,3,,dv_source_date_time,,timestamp,0,7,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+21,satellite,Version_End_Date,8,,dv_rowenddate,,timestamp,0,7,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+9,hub,Object_Key,1,h_,%,_key,int,0,0,0,,false,true,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+12,link,Object_Key,1,l_,%,_key,int,0,0,0,,false,true,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+15,satellite,Object_Key,1,s_,%,_key,int,0,0,0,,false,true,false,4,2,1,postgres,2017-02-14 12:17:15.917598,0
+20,satellite,Version_Start_Date,7,,dv_rowstartdate,,timestamp,0,7,0,,false,false,false,4,2,1,postgres,2017-02-14 12:17:15.917598,1
+22,stage_table,process_status,0,NULL,status,NULL,varchar,0,0,0,NULL,true,false,false,4,2,1,postgres,2017-02-23 17:51:29.407234,0
+23,stage_table,Load_Date_Time,0,NULL,dv_load_datetime,NULL,timestamp,NULL,NULL,NULL,NULL,true,false,false,4,2,1,postgres,2017-02-24 11:25:44.138275,0
