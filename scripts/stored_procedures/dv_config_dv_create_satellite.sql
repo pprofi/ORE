@@ -60,7 +60,8 @@ BEGIN
         AND s.link_hub_satellite_flag = 'H';
 
   -- generate satellite name
-  sat_name_v:=fn_get_object_name(object_name_in, 'sat');
+  sat_name_v:=fn_get_object_name(object_name_in, 'satellite');
+
 
   RAISE NOTICE ' Sat name %-->', sat_name_v;
   RAISE NOTICE ' Hub name %-->', hub_name_v;

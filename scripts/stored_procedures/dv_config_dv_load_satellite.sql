@@ -35,7 +35,7 @@ BEGIN
   WHERE s.satellite_schema = satellite_schema_in AND s.satellite_name = satellite_name_in;
 
   -- get satellite name
-  satellite_name_v:=fn_get_object_name(satellite_name_in, 'sat');
+  satellite_name_v:=fn_get_object_name(satellite_name_in, 'satellite');
 
   IF COALESCE(satellite_name_v, '') = '' or COALESCE(hub_name_v, '')=''
   THEN
