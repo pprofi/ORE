@@ -10,6 +10,7 @@ ORE is a multi-tenant configuration engine which helps to build data store using
 
 ## Requirements: ##
 To install ORE, you need to have:
+
 * PostgreSQL server running 
 * any IDE for working with PostgreSQL database (DataGrip,EMS...) 
 * administrative rights to be able to create objects
@@ -19,6 +20,7 @@ The related project "optimal-data-engine-mssql-scripts" in the OptimalBI reposit
 
 ## Branches: ##
 Currently, ORE has 3 Branches available:
+
 * master
 * dev
 * dev-clean
