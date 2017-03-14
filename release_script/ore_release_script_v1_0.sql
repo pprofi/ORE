@@ -1947,7 +1947,7 @@ BEGIN
                'filegroup',
                1,
                'varchar',
-               cast( NULL as integer) ,
+               NULL ,
                'primary',
                NULL
              UNION ALL
@@ -1990,7 +1990,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'satellite',
@@ -2007,7 +2007,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'satellite',
@@ -2024,7 +2024,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'hub',
@@ -2041,7 +2041,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'satellite',
@@ -2058,7 +2058,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'satellite',
@@ -2075,7 +2075,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'hub',
@@ -2092,7 +2092,7 @@ BEGIN
                FALSE,
                TRUE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'satellite',
@@ -2109,7 +2109,7 @@ BEGIN
                FALSE,
                TRUE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
 
@@ -2127,7 +2127,7 @@ BEGIN
                FALSE,
                FALSE,
                FALSE,
-               1
+               TRUE
              UNION ALL
              SELECT
                'stage_table',
@@ -2144,7 +2144,7 @@ BEGIN
                TRUE,
                FALSE,
                FALSE,
-               0
+               FALSE
              UNION ALL
              SELECT
                'stage_table',
@@ -2161,7 +2161,7 @@ BEGIN
                TRUE,
                FALSE,
                FALSE,
-               0) r;
+               FALSE) r;
 
 
   ELSE
