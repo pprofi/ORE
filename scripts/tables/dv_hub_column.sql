@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX dv_hub_column_unq
 
 -- audit
 CREATE TRIGGER dv_hub_column_audit
-AFTER UPDATE ON dv_hub_column_rule
+AFTER UPDATE ON dv_hub_column
 FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();

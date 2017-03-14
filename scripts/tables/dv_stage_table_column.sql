@@ -29,8 +29,8 @@ CREATE UNIQUE INDEX dv_stage_table_column_unq
   ON dv_stage_table_column (owner_key, stage_table_key, column_name);
 
 -- audit
-CREATE TRIGGER dv__stage_table_column_audit
-AFTER UPDATE ON dv__stage_table_column
+CREATE TRIGGER dv_stage_table_column_audit
+AFTER UPDATE ON dv_stage_table_column
 FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();

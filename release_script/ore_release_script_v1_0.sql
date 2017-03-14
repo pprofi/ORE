@@ -171,6 +171,7 @@ CREATE TABLE dv_default_column
   collation_name     VARCHAR(128),
   is_nullable        BOOLEAN DEFAULT TRUE                                                         NOT NULL,
   is_pk              BOOLEAN DEFAULT FALSE                                                        NOT NULL,
+  is_indexed         BOOLEAN DEFAULT FALSE                                                        NOT NULL,
   discard_flag       BOOLEAN DEFAULT FALSE                                                        NOT NULL,
   release_key        INTEGER DEFAULT 1                                                            NOT NULL,
   owner_key          INTEGER DEFAULT 1                                                            NOT NULL,
@@ -335,8 +336,8 @@ CREATE UNIQUE INDEX dv_stage_table_column_unq
   ON dv_stage_table_column (owner_key, stage_table_key, column_name);
 
 -- audit
-CREATE TRIGGER dv__stage_table_column_audit
-AFTER UPDATE ON dv__stage_table_column
+CREATE TRIGGER dv_stage_table_column_audit
+AFTER UPDATE ON dv_stage_table_column
 FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
@@ -490,7 +491,7 @@ CREATE UNIQUE INDEX dv_hub_column_unq
 
 -- audit
 CREATE TRIGGER dv_hub_column_audit
-AFTER UPDATE ON dv_hub_column_rule
+AFTER UPDATE ON dv_hub_column
 FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
@@ -1539,7 +1540,7 @@ BEGIN
   IF COALESCE(hub_name_v, '') = ''
   THEN
     RAISE NOTICE 'Not valid hub name --> %', hub_name_in;
-    RETURN ;
+    RETURN NULL ;
   END IF;
 
 
@@ -1668,7 +1669,7 @@ BEGIN
   IF COALESCE(satellite_name_v, '') = '' or COALESCE(hub_name_v, '')=''
   THEN
     RAISE NOTICE 'Not valid satellite name --> %', satellite_name_in;
-    RETURN ;
+    RETURN NULL;
   END IF;
 
   -- code snippets
@@ -1859,7 +1860,7 @@ DECLARE
   owner_key_v   INT;
   release_key_v INT;
   cnt_v         INT;
-  release_v     VARCHAR(50);
+  release_v     VARCHAR[][];
 
 BEGIN
   RAISE NOTICE 'Configuring default values...';
@@ -1895,25 +1896,31 @@ BEGIN
 
     INSERT INTO ore_config.dv_defaults (default_type, default_subtype, default_sequence, data_type, default_integer, default_varchar, default_datetime, owner_key, release_key)
       SELECT
-        r.*,
+        r.default_type,
+        r.default_subtype,
+        r.default_sequence,
+        r.data_type,
+       cast(r.default_integer as INTEGER ),
+        r.default_varchar,
+       cast( r.default_datetime as timestamp),
         owner_key_v,
         release_key_v
       FROM (
              SELECT
-               'hub',
-               'filegroup',
-               1,
-               'varchar',
-               NULL,
-               'primary',
-               NULL
+               'hub' as default_type,
+               'filegroup' as default_subtype,
+               1 as default_sequence,
+               'varchar' as data_type,
+              null as default_integer,
+               'primary' as default_varchar,
+               NULL as default_datetime
              UNION ALL
              SELECT
                'hub',
                'prefix',
                1,
                'varchar',
-               NULL,
+              null ,
                'h_',
                NULL
              UNION ALL
@@ -1931,7 +1938,7 @@ BEGIN
                'suffix',
                1,
                'varchar',
-               NULL,
+              null ,
                '_key',
                NULL
              UNION ALL
@@ -1940,7 +1947,7 @@ BEGIN
                'filegroup',
                1,
                'varchar',
-               NULL,
+               cast( NULL as integer) ,
                'primary',
                NULL
              UNION ALL
@@ -1949,7 +1956,7 @@ BEGIN
                'prefix',
                1,
                'varchar',
-               NULL,
+              null ,
                's_',
                NULL
              UNION ALL
@@ -1958,7 +1965,7 @@ BEGIN
                'suffix',
                1,
                'varchar',
-               NULL,
+               null ,
                '_key',
                NULL) r;
 

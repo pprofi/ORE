@@ -18,6 +18,7 @@ CREATE TABLE dv_default_column
   collation_name     VARCHAR(128),
   is_nullable        BOOLEAN DEFAULT TRUE                                                         NOT NULL,
   is_pk              BOOLEAN DEFAULT FALSE                                                        NOT NULL,
+  is_indexed         BOOLEAN DEFAULT FALSE                                                        NOT NULL,
   discard_flag       BOOLEAN DEFAULT FALSE                                                        NOT NULL,
   release_key        INTEGER DEFAULT 1                                                            NOT NULL,
   owner_key          INTEGER DEFAULT 1                                                            NOT NULL,
