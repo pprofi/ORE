@@ -1867,7 +1867,7 @@ BEGIN
 
   -- default owner
   SELECT dv_config_object_insert('dv_owner',
-                                 '{{"owner_name","default"},{"owner_description","default owner"}')
+                                 '{{"owner_name","default"},{"owner_description","default owner"}}')
   INTO cnt_v;
 
   IF cnt_v > 0
@@ -1900,9 +1900,9 @@ BEGIN
         r.default_subtype,
         r.default_sequence,
         r.data_type,
-       cast(r.default_integer as INTEGER ),
+        cast(r.default_integer as INTEGER ),
         r.default_varchar,
-       cast( r.default_datetime as timestamp),
+        cast( r.default_datetime as timestamp),
         owner_key_v,
         release_key_v
       FROM (
@@ -1911,7 +1911,7 @@ BEGIN
                'filegroup' as default_subtype,
                1 as default_sequence,
                'varchar' as data_type,
-              null as default_integer,
+               null as default_integer,
                'primary' as default_varchar,
                NULL as default_datetime
              UNION ALL

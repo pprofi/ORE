@@ -26,7 +26,7 @@ BEGIN
   IF COALESCE(hub_name_v, '') = ''
   THEN
     RAISE NOTICE 'Not valid hub name --> %', hub_name_in;
-    RETURN ;
+    RETURN NULL;
   END IF;
 
 

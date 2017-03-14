@@ -40,7 +40,7 @@ BEGIN
   IF COALESCE(satellite_name_v, '') = '' or COALESCE(hub_name_v, '')=''
   THEN
     RAISE NOTICE 'Not valid satellite name --> %', satellite_name_in;
-    RETURN ;
+    RETURN NULL;
   END IF;
 
   -- code snippets
