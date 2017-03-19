@@ -688,7 +688,7 @@ BEGIN
               CASE WHEN d.object_column_type = 'Object_Key'
                 THEN 1
               ELSE 0 END             AS is_key,
-             d.is_indexed
+             cast(d.is_indexed as integer) as is_indexed
             FROM dv_default_column d
             WHERE object_type = object_type_in
             and (d.object_column_type=object_column_type_in or object_column_type_in is null)
