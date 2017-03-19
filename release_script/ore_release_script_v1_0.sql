@@ -2137,7 +2137,7 @@ BEGIN
                'status',
                NULL,
                'varchar',
-               0,
+               30,
                0,
                0,
                NULL,
