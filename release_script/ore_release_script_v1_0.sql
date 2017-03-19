@@ -1855,6 +1855,12 @@ LANGUAGE plpgsql;
 
 /************************* default values setup **********************************************************************/
 
+RAISE NOTICE 'Configuring Postgres extentions...';
+
+SET SEARCH_PATH TO public;
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 DO $$
 DECLARE
   owner_key_v   INT;
