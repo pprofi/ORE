@@ -7,11 +7,11 @@ CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
   RETURNS TEXT AS
 $BODY$
 DECLARE
-  sql_block_start_v    TEXT;
-  sql_block_end_v      TEXT;
+  sql_block_start_v    TEXT:='';
+  sql_block_end_v      TEXT:='';
   sql_block_body_v     TEXT;
-  sql_process_start_v  TEXT;
-  sql_process_finish_v TEXT;
+  sql_process_start_v  TEXT:='';
+  sql_process_finish_v TEXT:='';
   delimiter_v          CHAR(2) :=',';
   newline_v            CHAR(3) :=E'\n';
   load_date_time_v          VARCHAR(10):='now()';
@@ -31,7 +31,7 @@ BEGIN
 
 
   -- code snippets
-  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+ /* sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
   sql_block_end_v:=newline_v || 'end$$;';
 
   -- update processing status stage
@@ -44,7 +44,7 @@ BEGIN
   quote_literal('PROCESSED') || ' where status=' ||
   quote_literal('PROCESSING')||';'||newline_v;
 
-
+*/
 
   -- dynamic upsert statement
   -- add process status select-update in transaction

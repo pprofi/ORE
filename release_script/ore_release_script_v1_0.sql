@@ -1521,11 +1521,11 @@ CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
   RETURNS TEXT AS
 $BODY$
 DECLARE
-  sql_block_start_v    TEXT;
-  sql_block_end_v      TEXT;
+  sql_block_start_v    TEXT:='';
+  sql_block_end_v      TEXT:='';
   sql_block_body_v     TEXT;
-  sql_process_start_v  TEXT;
-  sql_process_finish_v TEXT;
+  sql_process_start_v  TEXT:='';
+  sql_process_finish_v TEXT:='';
   delimiter_v          CHAR(2) :=',';
   newline_v            CHAR(3) :=E'\n';
   load_date_time_v          VARCHAR(10):='now()';
@@ -1545,7 +1545,7 @@ BEGIN
 
 
   -- code snippets
-  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+/*  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
   sql_block_end_v:=newline_v || 'end$$;';
 
   -- update processing status stage
@@ -1558,7 +1558,7 @@ BEGIN
   quote_literal('PROCESSED') || ' where status=' ||
   quote_literal('PROCESSING')||';'||newline_v;
 
-
+*/
 
   -- dynamic upsert statement
   -- add process status select-update in transaction
@@ -1637,11 +1637,11 @@ CREATE OR REPLACE FUNCTION dv_config_dv_load_satellite(
   RETURNS TEXT AS
 $BODY$
 DECLARE
-  sql_block_start_v    TEXT;
-  sql_block_end_v      TEXT;
+  sql_block_start_v    TEXT:='';
+  sql_block_end_v      TEXT:='';
   sql_block_body_v     TEXT;
-  sql_process_start_v  TEXT;
-  sql_process_finish_v TEXT;
+  sql_process_start_v  TEXT:='';
+  sql_process_finish_v TEXT:='';
   delimiter_v          CHAR(2) :=',';
   newline_v            CHAR(3) :=E'\n';
   load_time_v          TIMESTAMPTZ;
@@ -1674,7 +1674,7 @@ BEGIN
 
   -- code snippets
   -- block
-  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+/*  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
   sql_block_end_v:=newline_v || 'end$$;';
 
   -- update status of records in stage table
@@ -1686,7 +1686,7 @@ BEGIN
   newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
   quote_literal('PROCESSED') || ' where status=' ||
   quote_literal('PROCESSING') || ';' || newline_v;
-
+*/
   -- dynamic upsert statement
   -- full load means that records for whose keys in staging not found will be marked as deleted
   -- lookup keys in hub
@@ -1759,6 +1759,8 @@ BEGIN
       JOIN dv_hub h ON h.hub_key = s.hub_key
       JOIN fn_get_dv_object_default_columns(h.hub_name, 'hub') c ON 1 = 1
     WHERE s.owner_key = h.owner_key
+          AND s.satellite_name = satellite_name_in
+          AND s.satellite_schema = satellite_schema_in
           AND c.is_key = 1)
   SELECT array_to_string(array_agg(t.ssql), E'\n')
   FROM (
