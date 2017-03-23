@@ -21,89 +21,118 @@ SELECT * FROM dblink("SELECT do_stuff_wrapper(10001, 5000)") AS t1(c1 TEXT, c2 T
 SELECT dblink_disconnect();
 */
 
-set SEARCH_PATH to ore_config;
+SET SEARCH_PATH TO ore_config;
 
 
-create SEQUENCE dv_schedule_seq start 1;
+CREATE SEQUENCE dv_schedule_seq START 1;
 
-create table dv_schedule
+CREATE TABLE dv_schedule
 (
-    schedule_key INTEGER DEFAULT nextval('dv_schedule_seq'::regclass) PRIMARY KEY NOT NULL,
-    schedule_name VARCHAR(128) NOT NULL,
-    schedule_description VARCHAR(500),
-    schedule_frequency VARCHAR(500),
-    is_cancelled BOOLEAN DEFAULT false NOT NULL,
-    release_key INTEGER DEFAULT 1 NOT NULL,
-    owner_key INTEGER DEFAULT 1 NOT NULL,
-    version_number INTEGER DEFAULT 1 NOT NULL,
-    updated_by VARCHAR(50) DEFAULT "current_user"() NOT NULL,
-    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    CONSTRAINT fk_dv_schedule_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
-    CONSTRAINT fk_dv_schedule_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
+  schedule_key         INTEGER                  DEFAULT nextval('dv_schedule_seq' :: REGCLASS) PRIMARY KEY NOT NULL,
+  schedule_name        VARCHAR(128)                                                                        NOT NULL,
+  schedule_description VARCHAR(500),
+  schedule_frequency   VARCHAR(500),
+  is_cancelled         BOOLEAN DEFAULT FALSE                                                               NOT NULL,
+  release_key          INTEGER DEFAULT 1                                                                   NOT NULL,
+  owner_key            INTEGER DEFAULT 1                                                                   NOT NULL,
+  version_number       INTEGER DEFAULT 1                                                                   NOT NULL,
+  updated_by           VARCHAR(50) DEFAULT "current_user"()                                                NOT NULL,
+  updated_datetime     TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  CONSTRAINT fk_dv_schedule_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_schedule_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
 );
 
-CREATE UNIQUE INDEX dv_schedule_unq ON dv_schedule (owner_key, schedule_name);
+CREATE UNIQUE INDEX dv_schedule_unq
+  ON dv_schedule (owner_key, schedule_name);
 
-create SEQUENCE dv_schedule_task_seq start 1;
-create table dv_schedule_task
+CREATE SEQUENCE dv_schedule_task_seq START 1;
+CREATE TABLE dv_schedule_task
 (
-    schedule_task_key INTEGER DEFAULT nextval('dv_schedule_task_seq'::regclass) PRIMARY KEY NOT NULL,
-    schedule_key integer not null,
-    object_key integer not null,
-    object_type varchar(50) not null,
-    load_type varchar(30) not null,
-    is_cancelled BOOLEAN DEFAULT false NOT NULL,
-    release_key INTEGER DEFAULT 1 NOT NULL,
-    owner_key INTEGER DEFAULT 1 NOT NULL,
-    version_number INTEGER DEFAULT 1 NOT NULL,
-    updated_by VARCHAR(50) DEFAULT "current_user"() NOT NULL,
-    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    CONSTRAINT fk_dv_schedule_task_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
-    CONSTRAINT fk_dv_schedule_task_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
-  CONSTRAINT fk_dv_schedule_task_dv_schedule FOREIGN KEY (schedule_key) REFERENCES dv_owner (owner_key)
+  schedule_task_key INTEGER                  DEFAULT nextval('dv_schedule_task_seq' :: REGCLASS) PRIMARY KEY NOT NULL,
+  schedule_key      INTEGER                                                                                  NOT NULL,
+  object_key        INTEGER                                                                                  NOT NULL,
+  object_type       VARCHAR(50)                                                                              NOT NULL,
+  load_type         VARCHAR(30)                                                                              NOT NULL,
+  is_cancelled      BOOLEAN DEFAULT FALSE                                                                    NOT NULL,
+  release_key       INTEGER DEFAULT 1                                                                        NOT NULL,
+  owner_key         INTEGER DEFAULT 1                                                                        NOT NULL,
+  version_number    INTEGER DEFAULT 1                                                                        NOT NULL,
+  updated_by        VARCHAR(50) DEFAULT "current_user"()                                                     NOT NULL,
+  updated_datetime  TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  CONSTRAINT fk_dv_schedule_task_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_schedule_task_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
+  CONSTRAINT fk_dv_schedule_task_dv_schedule FOREIGN KEY (schedule_key) REFERENCES dv_schedule (schedule_key)
 
 );
-CREATE UNIQUE INDEX dv_schedule_task_unq ON dv_schedule_task (owner_key,schedule_key, object_key,object_type,load_type);
+CREATE UNIQUE INDEX dv_schedule_task_unq
+  ON dv_schedule_task (owner_key, schedule_key, object_key, object_type, load_type);
 
-create SEQUENCE dv_schedule_tasks_hierarchy_seq start 1;
-create table dv_schedule_tasks_hierarchy
+CREATE SEQUENCE dv_schedule_task_hierarchy_seq START 1;
+CREATE TABLE dv_schedule_task_hierarchy
+(
+  schedule_task_hierarchy_key INTEGER                  DEFAULT nextval(
+      'dv_schedule_task_hierarchy_seq' :: REGCLASS) PRIMARY KEY    NOT NULL,
+  schedule_task_key           INTEGER                              NOT NULL,
+  schedule_parent_task_key    INTEGER,
+  is_cancelled                BOOLEAN DEFAULT FALSE                NOT NULL,
+  release_key                 INTEGER DEFAULT 1                    NOT NULL,
+  owner_key                   INTEGER DEFAULT 1                    NOT NULL,
+  version_number              INTEGER DEFAULT 1                    NOT NULL,
+  updated_by                  VARCHAR(50) DEFAULT "current_user"() NOT NULL,
+  updated_datetime            TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  CONSTRAINT fk_dv_schedule_task_hierarchy_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_schedule_task_hierarchy_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
+  CONSTRAINT fk_dv_schedule_task_hierarchy_dv_schedule_task FOREIGN KEY (schedule_task_key) REFERENCES dv_schedule_task (schedule_task_key)
+);
+
+CREATE UNIQUE INDEX dv_schedule_task_hierarchy_unq
+  ON dv_schedule_task_hierarchy (owner_key, schedule_task_key, schedule_parent_task_key);
+
+CREATE SEQUENCE dv_task_run_seq START 1;
+CREATE TABLE dv_task_run
+(
+  task_run_key INTEGER                  DEFAULT nextval('dv_task_run_seq' :: REGCLASS) PRIMARY KEY    NOT NULL,
+  schedule_key  integer not null,
+  schedule_task_key           INTEGER                              NOT NULL,
+  task_run_status   varchar(30) not null,
+  start_datetime timestamp,
+  finish_datetime timestamp,
+  owner_key                   INTEGER DEFAULT 1                    NOT NULL,
+  CONSTRAINT fk_dv_task_run_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
+  CONSTRAINT fk_dv_task_run_dv_schedule_task FOREIGN KEY (schedule_task_key) REFERENCES dv_schedule_task (schedule_task_key),
+  CONSTRAINT fk_dv_task_run_dv_schedule FOREIGN KEY (schedule_key) REFERENCES dv_schedule (schedule_key)
+);
+
+CREATE UNIQUE INDEX dv_task_run_unq
+  ON dv_task_run (owner_key, schedule_key, schedule_task_key);
+
+CREATE SEQUENCE dv_task_run_history_seq START 1;
+CREATE TABLE dv_task_run_history
+(
+  task_run_history_key INTEGER                  DEFAULT nextval('dv_task_run_history_seq' :: REGCLASS) PRIMARY KEY    NOT NULL,
+  schedule_key  integer not null,
+  schedule_task_key           INTEGER                              NOT NULL,
+  task_run_status   varchar(30) not null,
+  start_datetime timestamp,
+  finish_datetime timestamp,
+  updated_datetime            TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  owner_key                   INTEGER DEFAULT 1                    NOT NULL,
+  CONSTRAINT fk_dv_task_run_history_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_task_run_history_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
+  CONSTRAINT fk_dv_task_run_history_dv_schedule_task FOREIGN KEY (schedule_task_key) REFERENCES dv_schedule_task (schedule_task_key)
+
+);
+
+CREATE SEQUENCE dv_object_load_state_seq START 1;
+CREATE TABLE dv_object_load_state
 (
 
 );
 
-create SEQUENCE dv_run_seq start 1;
-create table dv_run
-();
-
-create SEQUENCE dv_run_history_seq start 1;
-create table dv_run_history
-();
-
-create SEQUENCE dv_object_load_state_seq start 1;
-create table dv_object_load_state
-(
-
-);
-
-create SEQUENCE dv_object_load_state_history_seq start 1;
-create table dv_object_load_state_history
+CREATE SEQUENCE dv_object_load_state_history_seq START 1;
+CREATE TABLE dv_object_load_state_history
 (
 
 );
 
 
-CREATE TABLE dv_hub
-(
-    hub_key INTEGER DEFAULT nextval('dv_hub_key_seq'::regclass) PRIMARY KEY NOT NULL,
-    hub_name VARCHAR(128) NOT NULL,
-    hub_schema VARCHAR(128) NOT NULL,
-    is_retired BOOLEAN DEFAULT false NOT NULL,
-    release_key INTEGER DEFAULT 1 NOT NULL,
-    owner_key INTEGER DEFAULT 1 NOT NULL,
-    version_number INTEGER DEFAULT 1 NOT NULL,
-    updated_by VARCHAR(50) DEFAULT "current_user"() NOT NULL,
-    updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
-    CONSTRAINT fk_dv_hub_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
-    CONSTRAINT fk_dv_hub_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
-);
-CREATE UNIQUE INDEX dv_hub_unq ON dv_hub (owner_key, hub_schema, hub_name);
