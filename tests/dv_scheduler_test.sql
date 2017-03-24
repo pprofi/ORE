@@ -153,7 +153,12 @@ CREATE TABLE dv_object_load_state_history
 -- tasks to execute (script)
 -- prepare for parallel run
 
-SELECT *
+SELECT t.schedule_key, t.schedule_name, t.owner_key,
+       t.schedule_frequency, t.schedule_task_key, t.parent_task_key,
+       t.object_key,
+       t.object_type,
+       t.load_type,
+
 FROM
   (
     SELECT
@@ -172,8 +177,76 @@ FROM
     WHERE s.is_cancelled = 0 AND st.is_cancelled = 0 AND sth.is_cancelled = 0
   ) t
   LEFT JOIN dv_business_rule b
-    ON b.business_rule_key = t.object_key AND t.object_type = 'BUSINESS_RULE' AND b.owner_key = t.owner_key
-  LEFT JOIN dv_stage_table st
+    ON b.business_rule_key = t.object_key AND t.object_type = 'BUSINESS_RULE' AND b.owner_key = t.owner_key and b.is_retired=0
+  LEFT JOIN
+
+    (
+      select * from
+    dv_stage_table st  ) st
     ON st.stage_table_key = t.object_key AND t.object_type = 'STAGE_TABLE' AND b.owner_key = st.owner_key
   LEFT JOIN dv_source_table ss
-    ON ss.source_table_key = t.object_key AND t.object_type = 'SOURCE_TABLE' AND b.owner_key = ss.owner_key
+    ON ss.source_table_key = t.object_key AND t.object_type = 'SOURCE_TABLE' AND b.owner_key = ss.owner_key and ss.is_retired=0
+
+
+-- pull of objects to be loaded
+-- hubs, links, satellites = need to add all these to hierarchy
+-- stage (via business rules), source (external system)
+
+
+
+
+
+
+-- stage table load
+select business_rule_key as object_key,  business_rule_name as object_name, business_rule_logic as logic,'BUSINESS_RULE' as object_type
+  from dv_business_rule b
+where b.is_retired=0
+union ALL
+    -- source table load
+select ss.source_table_key, source_table_schema||'.'||source_table_name, '' as logic, 'SOURCE_TABLE'
+  from
+    dv_source_table ss
+WHERE ss.is_retired=0
+union ALL
+    -- load hub
+select distinct h.hub_key,h.hub_schema||'.'||h.hub_name, ||'dv_config_dv_load_hub'
+  from dv_hub h join dv_hub_key_column hk on h.hub_key = hk.hub_key
+       join dv_hub_column hc on hc.hub_key_column_key=hk.hub_key_column_key
+       join dv_stage_table_column sc on sc.column_key=hc.column_key
+       join dv_stage_table st on st.stage_table_key=sc.stage_table_key
+
+
+-- procedure to generate executable statement for load of any type
+
+CREATE OR REPLACE FUNCTION fn_get_dv_object_load_script(object_key_in VARCHAR(100), object_type_in VARCHAR(50)
+)
+  RETURNS TEXT AS
+$BODY$
+DECLARE
+  sql_v TEXT;
+BEGIN
+
+  case object_type_in
+    when 'business_rule' then
+  -- 1. business_rule/ stage table
+
+
+    when 'source_table' then
+  -- 2. source - nothing
+
+    when 'hub' then
+  -- 3. hub
+
+    when 'satellite' THEN
+
+  -- 4. satellite
+    ELSE
+      sql_v:='';
+      end case;
+
+
+  RETURN sql_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
