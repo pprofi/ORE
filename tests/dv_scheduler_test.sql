@@ -218,31 +218,59 @@ select distinct h.hub_key,h.hub_schema||'.'||h.hub_name, ||'dv_config_dv_load_hu
 
 -- procedure to generate executable statement for load of any type
 
-CREATE OR REPLACE FUNCTION fn_get_dv_object_load_script(object_key_in VARCHAR(100), object_type_in VARCHAR(50)
-)
+CREATE OR REPLACE FUNCTION fn_get_dv_object_load_script(object_key_in VARCHAR(100), object_type_in VARCHAR(50),
+                                                        load_type_in  VARCHAR(30), owner_key_in INTEGER)
   RETURNS TEXT AS
 $BODY$
 DECLARE
   sql_v TEXT;
 BEGIN
 
-  case object_type_in
-    when 'business_rule' then
-  -- 1. business_rule/ stage table
+  CASE object_type_in
+    WHEN 'business_rule'
+    THEN
+      -- 1. business_rule/ stage table
+      -- if it is stored procedure then different
+      SELECT business_rule_logic
+      INTO sql_v
+      FROM dv_business_rule
+      WHERE business_rule_key = object_key_in
+            AND is_retired = 0
+            AND owner_key = owner_key_in;
 
-
-    when 'source_table' then
-  -- 2. source - nothing
-
-    when 'hub' then
-  -- 3. hub
-
-    when 'satellite' THEN
-
-  -- 4. satellite
-    ELSE
-      sql_v:='';
-      end case;
+    WHEN 'hub'
+    THEN
+      -- 2. hub
+      SELECT DISTINCT
+        'ore_config.dv_config_dv_load_hub(' || st.stage_table_schema || ',' || st.stage_table_name || ',' ||
+        h.hub_schema || ',' ||
+        h.hub_name || ');'
+      INTO sql_v
+      FROM dv_hub h
+        JOIN dv_hub_key_column hk ON h.hub_key = hk.hub_key
+        JOIN dv_hub_column hc ON hc.hub_key_column_key = hk.hub_key_column_key
+        JOIN dv_stage_table_column sc ON sc.column_key = hc.column_key
+        JOIN dv_stage_table st ON st.stage_table_key = sc.stage_table_key
+      WHERE h.owner_key = owner_key_in AND h.is_retired = 0 AND st.is_retired = 0 AND sc.is_retired = 0
+            AND h.hub_key = object_key_in;
+    WHEN 'satellite'
+    THEN
+      -- 3. satellite
+      SELECT DISTINCT
+        'ore_config.dv_config_dv_load_satellite(' || st.stage_table_schema || ',' || st.stage_table_name || ',' ||
+        s.satellite_schema || ',' || s.satellite_name || ',' || load_type_in || ');'
+      INTO sql_v
+      FROM dv_satellite s
+        JOIN dv_satellite_column sc ON sc.satellite_key = s.satellite_key
+        JOIN dv_stage_table_column stc ON stc.column_key = sc.column_key
+        JOIN dv_stage_table st ON st.stc.stage_table_key = st.stage_table_key
+      WHERE s.is_retired = 0 AND st.is_retired = 0 AND stc.is_retired = 0
+            AND s.owner_key = owner_key_in
+            AND s.satellite_key = object_key_in;
+  ELSE
+    -- 4. source or anything else -  nothing
+    sql_v:='';
+  END CASE;
 
 
   RETURN sql_v;
