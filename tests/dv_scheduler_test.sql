@@ -32,8 +32,9 @@ CREATE TABLE dv_schedule
       'dv_schedule_seq' :: REGCLASS) PRIMARY KEY                                                           NOT NULL,
   schedule_name        VARCHAR(128)                                                                        NOT NULL,
   schedule_description VARCHAR(500),
-  schedule_frequency   VARCHAR(500),
-  start_date           TIMESTAMP,
+  schedule_frequency   INTERVAL,
+  start_date           TIMESTAMP                DEFAULT now(),
+  last_start_date      TIMESTAMP,
   is_cancelled         BOOLEAN DEFAULT FALSE                                                               NOT NULL,
   release_key          INTEGER DEFAULT 1                                                                   NOT NULL,
   owner_key            INTEGER DEFAULT 1                                                                   NOT NULL,
@@ -152,63 +153,63 @@ CREATE TABLE dv_object_load_state_history
 
 -- tasks to execute (script)
 -- prepare for parallel run
-
-SELECT
-  t.schedule_key,
-  t.schedule_name,
-  t.owner_key,
-  t.schedule_frequency,
-  t.schedule_task_key,
-  t.parent_task_key,
-  t.depth,
-  t.object_key,
-  t.object_type,
-  t.load_type,
-  fn_get_dv_object_load_script(t.object_key, t.object_type, t.load_type, t.owner_key) AS script
-FROM
-  (
-    SELECT
-      s.schedule_key,
-      s.owner_key,
-      s.schedule_name,
-      s.schedule_frequency,
-      s.start_date,
-      st.schedule_task_key,
-      sth.parent_task_key,
-      sth.depth,
-      st.object_key,
-      st.object_type,
-      st.load_type
-    FROM dv_schedule s
-      JOIN dv_schedule_task st ON s.schedule_key = st.schedule_key
-      JOIN
-      (
-        WITH RECURSIVE node_rec AS
+CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
+  SELECT
+    t.schedule_key,
+    t.schedule_name,
+    t.owner_key,
+    t.schedule_frequency,
+    t.schedule_task_key,
+    t.parent_task_key,
+    t.depth as task_level,
+    t.object_key,
+    t.object_type,
+    t.load_type,
+    fn_get_dv_object_load_script(t.object_key, t.object_type, t.load_type, t.owner_key) AS load_script
+  FROM
+    (
+      SELECT
+        s.schedule_key,
+        s.owner_key,
+        s.schedule_name,
+        s.schedule_frequency,
+        s.start_date,
+        st.schedule_task_key,
+        sth.parent_task_key,
+        sth.depth,
+        st.object_key,
+        st.object_type,
+        st.load_type
+      FROM dv_schedule s
+        JOIN dv_schedule_task st ON s.schedule_key = st.schedule_key
+        JOIN
         (
+          WITH RECURSIVE node_rec AS
+          (
+            SELECT
+              1                        AS depth,
+              schedule_task_key        AS task_key,
+              schedule_parent_task_key AS parent_task_key
+            FROM dv_schedule_task_hierarchy
+            WHERE schedule_parent_task_key IS NULL AND is_cancelled = FALSE
+            UNION ALL
+            SELECT
+              depth + 1,
+              n.schedule_task_key        AS task_key,
+              n.schedule_parent_task_key AS parent_task_key
+            FROM dv_schedule_task_hierarchy AS n
+              JOIN node_rec r ON n.schedule_parent_task_key = r.task_key
+            WHERE n.is_cancelled = FALSE
+          )
           SELECT
-            1                        AS depth,
-            schedule_task_key        AS task_key,
-            schedule_parent_task_key AS parent_task_key
-          FROM dv_schedule_task_hierarchy
-          WHERE schedule_parent_task_key IS NULL AND is_cancelled = FALSE
-          UNION ALL
-          SELECT
-            depth + 1,
-            n.schedule_task_key        AS task_key,
-            n.schedule_parent_task_key AS parent_task_key
-          FROM dv_schedule_task_hierarchy AS n
-            JOIN node_rec r ON n.schedule_parent_task_key = r.task_key
-          WHERE n.is_cancelled = FALSE
+            depth,
+            task_key,
+            parent_task_key
+          FROM node_rec
         )
-        SELECT
-          depth,
-          task_key,
-          parent_task_key
-        FROM node_rec
-      )
-      sth ON sth.task_key = st.schedule_task_key
-    WHERE s.is_cancelled = FALSE AND st.is_cancelled = FALSE
-  ) t;
+        sth ON sth.task_key = st.schedule_task_key
+      WHERE s.is_cancelled = FALSE AND st.is_cancelled = FALSE
+    ) t;
 
 -- procedure to generate executable statement for load of any type
 
@@ -272,3 +273,30 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
+
+
+-- process is running and picks up for execution some tasks
+
+CREATE OR REPLACE FUNCTION dv_process_run()
+  RETURNS VOID AS
+$BODY$
+DECLARE
+BEGIN
+
+
+
+  -- never ending cycle
+  WHILE (1) LOOP
+
+    SELECT *
+    FROM dv_schedule
+    WHERE is_cancelled = FALSE AND now() > coalesce(last_start_date, start_date)
+          AND now() <= coalesce(last_start_date, start_date) + schedule_frequency + INTERVAL '5' SECOND;
+
+  END LOOP;
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+select now();
