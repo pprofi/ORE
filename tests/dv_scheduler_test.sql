@@ -99,6 +99,7 @@ CREATE TABLE dv_task_run
   schedule_key      INTEGER                                                               NOT NULL,
   schedule_task_key INTEGER                                                               NOT NULL,
   task_run_status   VARCHAR(30)                                                           NOT NULL,
+  session_id        varchar(300),
   start_datetime    TIMESTAMP,
   finish_datetime   TIMESTAMP,
   owner_key         INTEGER DEFAULT 1                                                     NOT NULL,
@@ -118,6 +119,7 @@ CREATE TABLE dv_task_run_history
   schedule_key         INTEGER                              NOT NULL,
   schedule_task_key    INTEGER                              NOT NULL,
   task_run_status      VARCHAR(30)                          NOT NULL,
+  session_id           varchar(300),
   start_datetime       TIMESTAMP,
   finish_datetime      TIMESTAMP,
   updated_datetime     TIMESTAMP WITH TIME ZONE DEFAULT now(),
@@ -161,7 +163,7 @@ CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
     t.schedule_frequency,
     t.schedule_task_key,
     t.parent_task_key,
-    t.depth as task_level,
+    t.depth                                                                             AS task_level,
     t.object_key,
     t.object_type,
     t.load_type,
@@ -274,7 +276,6 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
-
 -- process is running and picks up for execution some tasks
 -- schedule executed if all tasks are in completed stated
 
@@ -284,40 +285,104 @@ LANGUAGE plpgsql;
 -- completed
 -- failed
 
+CREATE TABLE dv_schedule_task_queue
+(
+  session_id        VARCHAR(300) NOT NULL,
+  schedule_key      INT,
+  schedule_task_key INT,
+  parent_task_key   INT,
+  task_level        INT,
+  process_status    VARCHAR(50),
+  script            TEXT,
+  start_datetime    TIMESTAMP,
+  update_datetime   TIMESTAMP,
+  owner_key         INT
+);
+
+
+CREATE OR REPLACE FUNCTION dv_scheduler_run()
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  start_time_v     TIMESTAMP;
+  session_id_v     VARCHAR(100);
+  process_status_v VARCHAR(20) :='queued';
+BEGIN
+
+  -- procedure checks tasks and add tasks which should be run into queue to be executed
+  -- separate procedure-process checks queue and executes individual tasks, updates states of tasks
+  -- never ending cycle
+  WHILE TRUE LOOP
+
+    start_time_v:=now();
+    session_id_v:=public.uuid_generate_v4();
+    -- select tasks for execution
+    -- queued process state
+    INSERT INTO dv_schedule_task_queue (session_id,
+                                        schedule_key,
+                                        schedule_task_key,
+                                        parent_task_key,
+                                        task_level,
+                                        process_status,
+                                        script,
+                                        start_datetime,
+                                        owner_key)
+      SELECT
+        session_id_v,
+        s.schedule_key,
+        v.schedule_task_key,
+        v.parent_task_key,
+        v.task_level,
+        process_status_v,
+        v.load_script AS script,
+        start_time_v,
+        v.owner_key
+      FROM dv_schedule s
+        JOIN dv_schedule_valid_tasks v ON s.schedule_key = v.schedule_key
+      --  left join dv_task_run r on
+      WHERE is_cancelled = FALSE AND start_time_v >= coalesce(last_start_date, start_date) + s.schedule_frequency
+            AND start_time_v < coalesce(last_start_date, start_date) + s.schedule_frequency + INTERVAL '5' SECOND
+            AND NOT exists(SELECT 1
+                           FROM dv_schedule_task_queue d
+                           WHERE
+                             d.schedule_key = s.schedule_key AND d.start_datetime > start_time_v - INTERVAL '5' SECOND);
+
+    -- update last run time per schedule
+    -- create dblink connection per independent stage & schedule
+    -- update statuses of the tasks and source tables then completed load (which is one of the tasks - need to create view
+    -- for update
+    -- script wrapper for generating code for execution with status records updates
+    -- tables cleanup
+  END LOOP;
+END
+$BODY$
+LANGUAGE plpgsql;
+
 
 CREATE OR REPLACE FUNCTION dv_process_run()
   RETURNS VOID AS
 $BODY$
 DECLARE
-  t_rec RECORD;
 BEGIN
 
+  -- process scanning queue if there tasks to execute
+  -- process pulls tasks from queue
+  -- checks running status of task and parent task
+  -- and executes task
+  -- update process status in run task table
+  -- deletes task from queue
+  -- somewhere should be some kind of parallelizm for different cowners & from staging to hubs and sats
 
-  -- never ending cycle
-  WHILE (1) LOOP
-
-    -- select tasks for execution
-    FOR t_rec IN (SELECT s.schedule_key, v.schedule_task_key, v.parent_task_key, v.task_level, v.load_script as script
-                  FROM dv_schedule s
-                    JOIN dv_schedule_valid_tasks v ON s.schedule_key = v.schedule_key
-                  --  left join dv_task_run r on
-                  WHERE is_cancelled = FALSE AND now() >= coalesce(last_start_date, start_date)+s.schedule_frequency
-                        AND now() < coalesce(last_start_date, start_date) + s.schedule_frequency + INTERVAL '10' SECOND)
-    LOOP
-
-     -- update last run time per schedule
-     -- create dblink connection per independent stage & schedule
-     -- update statuses of the tasks and source tables then completed load (which is one of the tasks - need to create view
-     -- for update
-     -- script wrapper for generating code for execution with status records updates
-     -- tables cleanup
-
-    END LOOP;
+  WHILE TRUE LOOP
 
   END LOOP;
+
 END
 $BODY$
 LANGUAGE plpgsql;
+
+
+
 
 
 -- load source status update
@@ -363,3 +428,5 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
+
+
