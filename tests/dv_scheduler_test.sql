@@ -297,7 +297,7 @@ BEGIN
   WHILE (1) LOOP
 
     -- select tasks for execution
-    FOR t_rec IN (SELECT *
+    FOR t_rec IN (SELECT s.schedule_key, v.schedule_task_key, v.parent_task_key, v.task_level, v.load_script as script
                   FROM dv_schedule s
                     JOIN dv_schedule_valid_tasks v ON s.schedule_key = v.schedule_key
                   --  left join dv_task_run r on
