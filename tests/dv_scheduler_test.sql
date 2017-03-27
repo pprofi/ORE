@@ -276,22 +276,43 @@ LANGUAGE plpgsql;
 
 
 -- process is running and picks up for execution some tasks
+-- schedule executed if all tasks are in completed stated
+
+-- queued
+-- waiting
+-- processing
+-- completed
+-- failed
+
 
 CREATE OR REPLACE FUNCTION dv_process_run()
   RETURNS VOID AS
 $BODY$
 DECLARE
+  t_rec RECORD;
 BEGIN
-
 
 
   -- never ending cycle
   WHILE (1) LOOP
 
-    SELECT *
-    FROM dv_schedule
-    WHERE is_cancelled = FALSE AND now() > coalesce(last_start_date, start_date)
-          AND now() <= coalesce(last_start_date, start_date) + schedule_frequency + INTERVAL '5' SECOND;
+    -- select tasks for execution
+    FOR t_rec IN (SELECT *
+                  FROM dv_schedule s
+                    JOIN dv_schedule_valid_tasks v ON s.schedule_key = v.schedule_key
+                  --  left join dv_task_run r on
+                  WHERE is_cancelled = FALSE AND now() >= coalesce(last_start_date, start_date)+s.schedule_frequency
+                        AND now() < coalesce(last_start_date, start_date) + s.schedule_frequency + INTERVAL '10' SECOND)
+    LOOP
+
+     -- update last run time per schedule
+     -- create dblink connection per independent stage & schedule
+     -- update statuses of the tasks and source tables then completed load (which is one of the tasks - need to create view
+     -- for update
+     -- script wrapper for generating code for execution with status records updates
+     -- tables cleanup
+
+    END LOOP;
 
   END LOOP;
 END
@@ -299,4 +320,46 @@ $BODY$
 LANGUAGE plpgsql;
 
 
-select now();
+-- load source status update
+
+CREATE OR REPLACE FUNCTION dv_load_source_status_update(owner_name_in   VARCHAR(100), system_name_in VARCHAR(100),
+                                                        table_schema_in VARCHAR(100),
+                                                        table_name_in   VARCHAR(100),
+                                                        start_time_in   TIMESTAMP, finish_time_in TIMESTAMP)
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  owner_key_v INTEGER;
+BEGIN
+
+  -- find owner key
+  SELECT owner_key
+  INTO owner_key_v
+  FROM dv_owner
+  WHERE owner_name = owner_name_in;
+
+  -- find related tasks
+
+  WITH t AS (
+      SELECT S.schedule_task_key AS task_key
+      FROM dv_schedule_task S
+        JOIN dv_source_table st ON S.object_key = st.source_table_key
+        JOIN dv_source_system ss ON st.system_key = ss.source_system_key
+      WHERE S.object_type = 'source' AND S.owner_key = owner_key_v
+            AND ss.source_system_name = system_name_in
+            AND st.source_table_schema = table_schema_in
+            AND st.source_table_name = table_name_in
+  )
+  UPDATE dv_task_run
+  SET start_datetime = coalesce(start_time_in, start_datetime),
+    finish_datetime  = coalesce(finish_time_in, finish_datetime),
+    task_run_status  = CASE WHEN start_time_in IS NOT NULL AND finish_time_in IS NULL
+      THEN 'PROCESSING'
+                       WHEN finish_time_in IS NOT NULL
+                         THEN 'COMPLETED' END
+  FROM t
+  WHERE schedule_task_key = t.task_key;
+
+END
+$BODY$
+LANGUAGE plpgsql;
