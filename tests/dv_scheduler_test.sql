@@ -299,6 +299,19 @@ CREATE TABLE dv_schedule_task_queue
   owner_key         INT
 );
 
+-- wrapper procedure to start and restart  dv_scheduler_run externally
+CREATE OR REPLACE FUNCTION dv_scheruler_init()
+  RETURNS INT AS
+$BODY$
+BEGIN
+-- db connect
+  -- dblink
+  -- execute dv_scheduler_run
+  -- disconnect
+END;
+$BODY$
+LANGUAGE plpgsql;
+--
 
 CREATE OR REPLACE FUNCTION dv_scheduler_run()
   RETURNS VOID AS
@@ -313,6 +326,7 @@ BEGIN
   -- separate procedure-process checks queue and executes individual tasks, updates states of tasks
   -- never ending cycle
   WHILE TRUE LOOP
+
 
     start_time_v:=now();
     session_id_v:=public.uuid_generate_v4();
@@ -358,6 +372,7 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
+-- add automatically tasks preprocessing for updating source table processing rows statuses and stage table processing status
 
 CREATE OR REPLACE FUNCTION dv_process_run()
   RETURNS VOID AS
@@ -395,6 +410,7 @@ CREATE OR REPLACE FUNCTION dv_load_source_status_update(owner_name_in   VARCHAR(
 $BODY$
 DECLARE
   owner_key_v INTEGER;
+
 BEGIN
 
   -- find owner key
@@ -429,4 +445,109 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
+--/////////////////////////////////////////////////////////////
 
+-- 2. after brain storming session
+-- externally on source update insert for particular schedule all task to execute in queued state
+
+CREATE TABLE dv_schedule_task_queue
+(
+  job_id            VARCHAR(300) NOT NULL,
+  schedule_key      INT,
+  schedule_task_key INT,
+  parent_task_key   INT,
+  task_level        INT,
+  process_status    VARCHAR(50),
+  script            TEXT,
+  start_datetime    TIMESTAMP,
+  update_datetime   TIMESTAMP,
+  owner_key         INT
+);
+
+
+CREATE OR REPLACE FUNCTION dv_load_source_status_update(job_id_in       VARCHAR(100), owner_name_in VARCHAR(100),
+                                                        system_name_in  VARCHAR(100),
+                                                        table_schema_in VARCHAR(100),
+                                                        table_name_in   VARCHAR(100))
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  owner_key_v      INTEGER;
+  start_time_v     TIMESTAMP;
+  process_status_v VARCHAR(20) :='queued';
+BEGIN
+
+  start_time_v:=now();
+  -- find owner key
+  SELECT owner_key
+  INTO owner_key_v
+  FROM dv_owner
+  WHERE owner_name = owner_name_in;
+
+  -- find related schedule tasks for source
+
+  -- select tasks for execution
+  -- queued process state
+  WITH src AS (
+      SELECT
+        S.schedule_task_key AS task_key,
+        s.schedule_key
+      FROM dv_schedule_task S
+        JOIN dv_source_table st ON S.object_key = st.source_table_key
+        JOIN dv_source_system ss ON st.system_key = ss.source_system_key
+      WHERE S.object_type = 'source' AND S.owner_key = owner_key_v
+            AND ss.source_system_name = system_name_in
+            AND st.source_table_schema = table_schema_in
+            AND st.source_table_name = table_name_in),
+      t AS (
+      INSERT INTO dv_schedule_task_queue (job_id,
+                                          schedule_key,
+                                          schedule_task_key,
+                                          parent_task_key,
+                                          task_level,
+                                          process_status,
+                                          script,
+                                          start_datetime,
+                                          owner_key)
+        SELECT
+          job_id_in,
+          schedule_key,
+          schedule_task_key,
+          parent_task_key,
+          task_level,
+          process_status_v,
+          load_script AS script,
+          start_time_v,
+          owner_key
+        FROM dv_schedule_valid_tasks v
+        WHERE v.schedule_key = src.schedule_key
+    )
+  UPDATE dv_schedule_task_queue
+  SET process_status = 'processing', update_datetime = now()
+  FROM t
+  WHERE job_id = job_id_in AND schedule_key = src.schedule_key AND schedule_task_key = src.task_key;
+
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+-- update very first task state into processing
+-- this triggers procedure to execute individual task, then updates to completed each tasks
+-- this should fire next task to execute
+-- use min job_id for particular schedule to execute
+
+
+-- runs next task
+
+CREATE OR REPLACE FUNCTION dv_run_schedule_task()
+  RETURNS TRIGGER
+AS $body$
+BEGIN
+  new.updated_by:=current_user;
+  new.updated_datetime:= now();
+  RETURN NULL;
+END
+$body$
+LANGUAGE plpgsql;
