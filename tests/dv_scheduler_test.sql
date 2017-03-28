@@ -465,6 +465,23 @@ CREATE TABLE dv_schedule_task_queue
 );
 
 
+CREATE TABLE dv_schedule_task_queue_history
+(
+  job_id            INT,
+  schedule_key      INT,
+  schedule_task_key INT,
+  parent_task_key   INT,
+  task_level        INT,
+  process_status    VARCHAR(50),
+  script            TEXT,
+  start_datetime    TIMESTAMP,
+  update_datetime   TIMESTAMP,
+  owner_key         INT,
+  insert_datetime       TIMESTAMP
+);
+
+
+
 CREATE OR REPLACE FUNCTION dv_load_source_status_update(job_id_in       INT, owner_name_in VARCHAR(100),
                                                         system_name_in  VARCHAR(100),
                                                         table_schema_in VARCHAR(100),
@@ -575,16 +592,20 @@ BEGIN
   IF task_key_v <> -1
   THEN
 
-    -- run execute statement if successfull then done
-    -- if fails update status
-
-    status_v:='failed';
-
+    -- separate transaction for error handling
+    BEGIN
+      -- run execute statement if successfull then done
+      EXECUTE exec_script_v;
+      EXCEPTION WHEN OTHERS
+      THEN
+        -- if fails update status
+        status_v:='failed';
+    END;
   ELSE
     -- if no child tasks check if there are another jobs for this schedule queued minimum of jobs_id
     SELECT
       coalesce(schedule_task_key, -1),
-      job_id
+      coalesce(job_id, -1)
     INTO task_key_v, job_id_v
     FROM (
            SELECT
@@ -595,22 +616,51 @@ BEGIN
                ORDER BY job_id ASC) AS rn
            FROM dv_schedule_task_queue
            WHERE parent_task_key IS NULL AND process_status = 'queued'
-                 AND schedule_key = schedule_key_in AND job_id <> job_id_in) t
+                 AND schedule_key = schedule_key_in AND job_id <> job_id_in AND parent_task_key IS NULL) t
     WHERE rn = 1;
-
-   -- no tasks to run for job_id
-   -- clean up and dump all executed tasks into history
-
 
   END IF;
 
   -- update status to done for the next iteration
   -- update status of the task to done or failed depending on execution
 
-
   UPDATE dv_schedule_task_queue
   SET process_status = status_v, update_datetime = now()
   WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
+
+  -- no tasks to run for job_id
+  -- clean up and dump all executed tasks into history
+  IF task_key_v = -1 OR job_id_v = -1
+  THEN
+
+    WITH del AS
+    (
+      DELETE FROM dv_schedule_task_queue
+      WHERE process_status = 'done' AND schedule_key = schedule_key_in AND job_id = job_id_in
+      RETURNING *
+    )
+    INSERT INTO dv_schedule_task_queue_history (job_id,
+                                                schedule_key,
+                                                schedule_task_key,
+                                                parent_task_key,
+                                                task_level,
+                                                process_status,
+                                                script,
+                                                start_datetime,
+                                                owner_key, insert_datetime)
+      SELECT
+        job_id,
+        schedule_key,
+        schedule_task_key,
+        parent_task_key,
+        task_level,
+        process_status,
+        script,
+        start_datetime,
+        owner_key,
+        now()
+      FROM del;
+  END IF;
 
   RETURN 1;
 END
@@ -622,11 +672,14 @@ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION dv_init_schedule_task_run()
   RETURNS TRIGGER
 AS $body$
+DECLARE
+  result_v INT;
 BEGIN
   IF new.process_status = 'done'
   THEN
 
-   NULL;
+    SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.parent_task_key)
+    INTO result_v;
 
   END IF;
   RETURN NULL;
