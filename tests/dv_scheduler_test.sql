@@ -552,24 +552,67 @@ FOR EACH ROW EXECUTE PROCEDURE dv_init_schedule_task_run();
 
 -- runs next task
 
-CREATE OR REPLACE FUNCTION dv_run_next_schedule_task(job_id_in INT,schedule_key_in int, parent_task_id INT)
+CREATE OR REPLACE FUNCTION dv_run_next_schedule_task(job_id_in INT, schedule_key_in INT, parent_task_key_in INT)
   RETURNS INT
 AS $body$
 DECLARE
-  cnt_v INT :=0;
+  exec_script_v  TEXT;
+  task_key_v     INT;
+  job_id_v       INT :=job_id_in;
+  schedule_key_v INT :=schedule_key_in;
+  status_v       VARCHAR :='done';
 BEGIN
 
   -- identify first task to run
-  -- if no child tasks check if there are another jobs for this schedule queued
 
-  -- select and execute
+  SELECT
+    coalesce(min(schedule_task_key), -1),
+    script
+  INTO task_key_v, exec_script_v
+  FROM dv_schedule_task_queue
+  WHERE job_id = job_id_in AND schedule_key = schedule_key_in AND parent_task_key = parent_task_key_in;
 
-  -- update process status
+  IF task_key_v <> -1
+  THEN
 
+    -- run execute statement if successfull then done
+    -- if fails update status
+
+    status_v:='failed';
+
+  ELSE
+    -- if no child tasks check if there are another jobs for this schedule queued minimum of jobs_id
+    SELECT
+      coalesce(schedule_task_key, -1),
+      job_id
+    INTO task_key_v, job_id_v
+    FROM (
+           SELECT
+             schedule_task_key,
+             job_id,
+             ROW_NUMBER()
+             OVER (
+               ORDER BY job_id ASC) AS rn
+           FROM dv_schedule_task_queue
+           WHERE parent_task_key IS NULL AND process_status = 'queued'
+                 AND schedule_key = schedule_key_in AND job_id <> job_id_in) t
+    WHERE rn = 1;
+
+   -- no tasks to run for job_id
    -- clean up and dump all executed tasks into history
 
 
-  RETURN cnt_v;
+  END IF;
+
+  -- update status to done for the next iteration
+  -- update status of the task to done or failed depending on execution
+
+
+  UPDATE dv_schedule_task_queue
+  SET process_status = status_v, update_datetime = now()
+  WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
+
+  RETURN 1;
 END
 $body$
 LANGUAGE plpgsql;
