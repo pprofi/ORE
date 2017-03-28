@@ -452,7 +452,7 @@ LANGUAGE plpgsql;
 
 CREATE TABLE dv_schedule_task_queue
 (
-  job_id            VARCHAR(300) NOT NULL,
+  job_id            int,
   schedule_key      INT,
   schedule_task_key INT,
   parent_task_key   INT,
@@ -465,7 +465,7 @@ CREATE TABLE dv_schedule_task_queue
 );
 
 
-CREATE OR REPLACE FUNCTION dv_load_source_status_update(job_id_in       VARCHAR(100), owner_name_in VARCHAR(100),
+CREATE OR REPLACE FUNCTION dv_load_source_status_update(job_id_in       INT, owner_name_in VARCHAR(100),
                                                         system_name_in  VARCHAR(100),
                                                         table_schema_in VARCHAR(100),
                                                         table_name_in   VARCHAR(100))
@@ -522,15 +522,23 @@ BEGIN
         FROM dv_schedule_valid_tasks v
         WHERE v.schedule_key = src.schedule_key
     )
+  -- updates first task to trigger schedule execution
   UPDATE dv_schedule_task_queue
-  SET process_status = 'processing', update_datetime = now()
+  SET process_status = 'done', update_datetime = now()
   FROM t
-  WHERE job_id = job_id_in AND schedule_key = src.schedule_key AND schedule_task_key = src.task_key;
+  WHERE job_id = job_id_in AND schedule_key = src.schedule_key AND schedule_task_key = src.task_key
+        AND NOT exists(SELECT 1
+                       FROM dv_schedule_task_queue d
+                       WHERE d.schedule_key = d.schedule_key AND d.job_id <> job_id AND
+                             d.process_status IN ('queued', 'processing'));
 
-
+  -- need to check if there is another job for this schedule is running and update status appropriately
 END
 $BODY$
 LANGUAGE plpgsql;
+
+
+-- there is a need to clean up -> dump to historic table all executed and failed tasks
 
 
 -- update very first task state into processing
@@ -538,16 +546,49 @@ LANGUAGE plpgsql;
 -- this should fire next task to execute
 -- use min job_id for particular schedule to execute
 
+CREATE TRIGGER dv_schedule_task_queue_tgu
+AFTER UPDATE ON dv_schedule_task_queue
+FOR EACH ROW EXECUTE PROCEDURE dv_init_schedule_task_run();
 
 -- runs next task
 
-CREATE OR REPLACE FUNCTION dv_run_schedule_task()
+CREATE OR REPLACE FUNCTION dv_run_next_schedule_task(job_id_in INT,schedule_key_in int, parent_task_id INT)
+  RETURNS INT
+AS $body$
+DECLARE
+  cnt_v INT :=0;
+BEGIN
+
+  -- identify first task to run
+  -- if no child tasks check if there are another jobs for this schedule queued
+
+  -- select and execute
+
+  -- update process status
+
+   -- clean up and dump all executed tasks into history
+
+
+  RETURN cnt_v;
+END
+$body$
+LANGUAGE plpgsql;
+
+-- triggers to run next task
+
+CREATE OR REPLACE FUNCTION dv_init_schedule_task_run()
   RETURNS TRIGGER
 AS $body$
 BEGIN
-  new.updated_by:=current_user;
-  new.updated_datetime:= now();
+  IF new.process_status = 'done'
+  THEN
+
+   NULL;
+
+  END IF;
   RETURN NULL;
 END
 $body$
 LANGUAGE plpgsql;
+
+
