@@ -83,7 +83,7 @@ BEGIN
                                 ', ') AS ssql
          FROM sql
          UNION ALL
-         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where status=' ||
+         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where dv_process_status=' ||
                          quote_literal('PROCESSING') || ')'
          FROM sql
          UNION ALL

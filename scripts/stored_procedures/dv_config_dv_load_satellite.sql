@@ -165,7 +165,7 @@ FROM (
        WHERE sql.is_surrogate_key = 1
        UNION ALL
        SELECT array_to_string(array_agg(' s.' || sql.stage_col_name || '=h.' || sql.hub_key_column_name),
-                              ' and ') || ' where s.status=' || quote_literal('PROCESSING')
+                              ' and ') || ' where s.dv_process_status=' || quote_literal('PROCESSING')
        FROM sql
        WHERE sql.is_business_key = 1
        UNION ALL

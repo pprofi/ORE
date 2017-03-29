@@ -1597,7 +1597,7 @@ BEGIN
                                 ', ') AS ssql
          FROM sql
          UNION ALL
-         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where status=' ||
+         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where dv_process_statuss=' ||
                          quote_literal('PROCESSING') || ')'
          FROM sql
          UNION ALL
@@ -1792,7 +1792,7 @@ FROM (
        WHERE sql.is_surrogate_key = 1
        UNION ALL
        SELECT array_to_string(array_agg(' s.' || sql.stage_col_name || '=h.' || sql.hub_key_column_name),
-                              ' and ') || ' where s.status=' || quote_literal('PROCESSING')
+                              ' and ') || ' where s.dv_process_status=' || quote_literal('PROCESSING')
        FROM sql
        WHERE sql.is_business_key = 1
        UNION ALL
@@ -1857,6 +1857,62 @@ INTO sql_block_body_v;
 
 
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+/*************************function dealing with source and stage processing statuses**********************************/
+
+ RAISE NOTICE 'Configuring helper functions...';
+
+
+CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in VARCHAR, table_name_in VARCHAR,
+                                                        operation_in    VARCHAR)
+  RETURNS TEXT AS
+$BODY$
+DECLARE
+  process_status_to_v   VARCHAR(30) :=operation_in;
+  process_status_from_v VARCHAR(30);
+  sql_v                 TEXT;
+BEGIN
+
+  -- update processing status
+  CASE operation_in
+    WHEN 'PROCESSING'
+    THEN
+      process_status_from_v:='RAW';
+    WHEN 'DONE'
+    THEN
+      process_status_from_v:='PROCESSING';
+  ELSE
+    NULL;
+  END CASE;
+
+  sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=' || process_status_to_v ||
+         ' where dv_process_status=' || process_status_from_v || ';';
+
+  RETURN sql_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION fn_dv_source_cleanup(table_schema_in VARCHAR, table_name_in VARCHAR)
+  RETURNS TEXT AS
+-- removes processed data from stage and source tables
+$BODY$
+DECLARE
+  sql_v            TEXT;
+  process_status_v VARCHAR :='DONE';
+BEGIN
+
+  sql_v:='delete from ' || table_schema_in || '.' || table_name_in || ' where  dv_process_status=' || process_status_v
+         || ';';
+
+  RETURN sql_v;
 
 END
 $BODY$
@@ -2150,7 +2206,7 @@ BEGIN
                'process_status',
                0,
                NULL,
-               'status',
+               'dv_process_status',
                NULL,
                'varchar',
                30,
