@@ -127,7 +127,9 @@ BEGIN
     THEN
       -- 1. business_rule/ stage table
       -- if it is stored procedure then different
-      SELECT business_rule_logic
+      SELECT (CASE WHEN business_rule_type = 'procedure'
+        THEN 'select '
+              ELSE '' END) || business_rule_logic
       INTO sql_v
       FROM dv_business_rule
       WHERE business_rule_key = object_key_in
@@ -138,7 +140,7 @@ BEGIN
     THEN
       -- 2. hub
       SELECT DISTINCT
-        'ore_config.dv_config_dv_load_hub(' || st.stage_table_schema || ',' || st.stage_table_name || ',' ||
+        'select ore_config.dv_config_dv_load_hub(' || st.stage_table_schema || ',' || st.stage_table_name || ',' ||
         h.hub_schema || ',' ||
         h.hub_name || ');'
       INTO sql_v
@@ -153,7 +155,7 @@ BEGIN
     THEN
       -- 3. satellite
       SELECT DISTINCT
-        'ore_config.dv_config_dv_load_satellite(' || st.stage_table_schema || ',' || st.stage_table_name || ',' ||
+        'select ore_config.dv_config_dv_load_satellite(' || st.stage_table_schema || ',' || st.stage_table_name || ',' ||
         s.satellite_schema || ',' || s.satellite_name || ',' || load_type_in || ');'
       INTO sql_v
       FROM dv_satellite s
