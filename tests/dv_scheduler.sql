@@ -357,17 +357,22 @@ BEGIN
           v.load_script AS script,
           start_time_v,
           v.owner_key
-        FROM dv_schedule_valid_tasks v join src on v.schedule_key = src.schedule_key
+        FROM dv_schedule_valid_tasks v
+          JOIN src ON v.schedule_key = src.schedule_key
+      RETURNING v.*
     )
   -- updates first task to trigger schedule execution
-  UPDATE dv_schedule_task_queue
+  UPDATE dv_schedule_task_queue q
   SET process_status = 'done', update_datetime = now()
   FROM t
-  WHERE job_id = job_id_in AND schedule_key = t.schedule_key AND schedule_task_key = t.task_key
+  WHERE q.job_id = job_id_in AND q.schedule_key = t.schedule_key AND q.schedule_task_key = t.schedule_task_key
+        AND q.parent_task_key IS NULL
         AND NOT exists(SELECT 1
                        FROM dv_schedule_task_queue d
-                       WHERE d.schedule_key = d.schedule_key AND d.job_id <> job_id AND
-                             d.process_status IN ('queued', 'processing'));
+                       WHERE d.schedule_key = q.schedule_key AND d.job_id <> job_id_in AND
+                             d.process_status IN ('queued', 'processing')
+                             AND d.start_datetime < q.start_datetime
+  );
 
   -- need to check if there is another job for this schedule is running and update status appropriately
 END
