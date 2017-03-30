@@ -313,6 +313,7 @@ DECLARE
   owner_key_v      INTEGER;
   start_time_v     TIMESTAMP;
   process_status_v VARCHAR(20) :='queued';
+  schedule_key_v   INT;
 BEGIN
 
   start_time_v:=now();
@@ -336,36 +337,35 @@ BEGIN
       WHERE S.object_type = 'source' AND S.owner_key = owner_key_v
             AND ss.source_system_name = system_name_in
             AND st.source_table_schema = table_schema_in
-            AND st.source_table_name = table_name_in),
-      t AS (
-      INSERT INTO dv_schedule_task_queue (job_id,
-                                          schedule_key,
-                                          schedule_task_key,
-                                          parent_task_key,
-                                          task_level,
-                                          process_status,
-                                          script,
-                                          start_datetime,
-                                          owner_key)
-        SELECT
-          job_id_in,
-          v.schedule_key,
-          v.schedule_task_key,
-          v.parent_task_key,
-          v.task_level,
-          process_status_v,
-          v.load_script AS script,
-          start_time_v,
-          v.owner_key
-        FROM dv_schedule_valid_tasks v
-          JOIN src ON v.schedule_key = src.schedule_key
-      RETURNING v.*
-    )
+            AND st.source_table_name = table_name_in)
+  INSERT INTO dv_schedule_task_queue (job_id,
+                                      schedule_key,
+                                      schedule_task_key,
+                                      parent_task_key,
+                                      task_level,
+                                      process_status,
+                                      script,
+                                      start_datetime,
+                                      owner_key)
+    SELECT
+      job_id_in,
+      v.schedule_key,
+      v.schedule_task_key,
+      v.parent_task_key,
+      v.task_level,
+      process_status_v,
+      v.load_script AS script,
+      start_time_v,
+      v.owner_key
+    FROM dv_schedule_valid_tasks v
+      JOIN src ON v.schedule_key = src.schedule_key
+  RETURNING v.schedule_key
+    INTO schedule_key_v;
+
   -- updates first task to trigger schedule execution
   UPDATE dv_schedule_task_queue q
   SET process_status = 'done', update_datetime = now()
-  FROM t
-  WHERE q.job_id = job_id_in AND q.schedule_key = t.schedule_key AND q.schedule_task_key = t.schedule_task_key
+  WHERE q.job_id = job_id_in AND q.schedule_key = schedule_key_v
         AND q.parent_task_key IS NULL
         AND NOT exists(SELECT 1
                        FROM dv_schedule_task_queue d
