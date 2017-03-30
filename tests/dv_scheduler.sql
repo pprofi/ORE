@@ -349,22 +349,21 @@ BEGIN
                                           owner_key)
         SELECT
           job_id_in,
-          schedule_key,
-          schedule_task_key,
-          parent_task_key,
-          task_level,
+          v.schedule_key,
+          v.schedule_task_key,
+          v.parent_task_key,
+          v.task_level,
           process_status_v,
-          load_script AS script,
+          v.load_script AS script,
           start_time_v,
-          owner_key
-        FROM dv_schedule_valid_tasks v
-        WHERE v.schedule_key = src.schedule_key
+          v.owner_key
+        FROM dv_schedule_valid_tasks v join src on v.schedule_key = src.schedule_key
     )
   -- updates first task to trigger schedule execution
   UPDATE dv_schedule_task_queue
   SET process_status = 'done', update_datetime = now()
   FROM t
-  WHERE job_id = job_id_in AND schedule_key = src.schedule_key AND schedule_task_key = src.task_key
+  WHERE job_id = job_id_in AND schedule_key = t.schedule_key AND schedule_task_key = t.task_key
         AND NOT exists(SELECT 1
                        FROM dv_schedule_task_queue d
                        WHERE d.schedule_key = d.schedule_key AND d.job_id <> job_id AND
