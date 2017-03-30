@@ -150,7 +150,7 @@ BEGIN
         JOIN dv_stage_table_column sc ON sc.column_key = hc.column_key
         JOIN dv_stage_table st ON st.stage_table_key = sc.stage_table_key
       WHERE h.owner_key = owner_key_in AND h.is_retired = 0 AND st.is_retired = 0 AND sc.is_retired = 0
-            AND h.hub_key = object_key_in;
+            AND st.stage_table_key = object_key_in;
     WHEN 'satellite'
     THEN
       -- 3. satellite
@@ -164,7 +164,7 @@ BEGIN
         JOIN dv_stage_table st ON st.stc.stage_table_key = st.stage_table_key
       WHERE s.is_retired = 0 AND st.is_retired = 0 AND stc.is_retired = 0
             AND s.owner_key = owner_key_in
-            AND s.satellite_key = object_key_in;
+            AND st.stage_table_key = object_key_in;
   ELSE
     -- 4. source or anything else -  nothing
     sql_v:='';
@@ -314,6 +314,7 @@ LANGUAGE plpgsql;
 
 
 -- runs next task
+-- allows only linear dependency!!!!!!!
 CREATE OR REPLACE FUNCTION dv_run_next_schedule_task(job_id_in INT, schedule_key_in INT, parent_task_key_in INT)
   RETURNS INT
 AS $body$
