@@ -133,7 +133,7 @@ BEGIN
       INTO sql_v
       FROM dv_business_rule
       WHERE business_rule_key = object_key_in
-            AND is_retired = 0
+            AND is_retired = false
             AND owner_key = owner_key_in;
 
     WHEN 'hub'
@@ -149,7 +149,7 @@ BEGIN
         JOIN dv_hub_column hc ON hc.hub_key_column_key = hk.hub_key_column_key
         JOIN dv_stage_table_column sc ON sc.column_key = hc.column_key
         JOIN dv_stage_table st ON st.stage_table_key = sc.stage_table_key
-      WHERE h.owner_key = owner_key_in AND h.is_retired = 0 AND st.is_retired = 0 AND sc.is_retired = 0
+      WHERE h.owner_key = owner_key_in AND h.is_retired = false AND st.is_retired = false AND sc.is_retired = false
             AND st.stage_table_key = object_key_in;
     WHEN 'satellite'
     THEN
@@ -161,8 +161,8 @@ BEGIN
       FROM dv_satellite s
         JOIN dv_satellite_column sc ON sc.satellite_key = s.satellite_key
         JOIN dv_stage_table_column stc ON stc.column_key = sc.column_key
-        JOIN dv_stage_table st ON st.stc.stage_table_key = st.stage_table_key
-      WHERE s.is_retired = 0 AND st.is_retired = 0 AND stc.is_retired = 0
+        JOIN dv_stage_table st ON stc.stage_table_key = st.stage_table_key
+      WHERE s.is_retired = false AND st.is_retired = false AND stc.is_retired = false
             AND s.owner_key = owner_key_in
             AND st.stage_table_key = object_key_in;
   ELSE
@@ -191,7 +191,7 @@ CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
     t.object_key,
     t.object_type,
     t.load_type,
-    fn_get_dv_object_load_script(t.object_key, t.object_type, t.load_type, t.owner_key) AS load_script
+    ore_config.fn_get_dv_object_load_script(t.object_key, t.object_type, t.load_type, t.owner_key) AS load_script
   FROM
     (
       SELECT
