@@ -90,6 +90,7 @@ CREATE TABLE dv_schedule_task_queue
   task_level        INT,
   process_status    VARCHAR(50),
   script            TEXT,
+  exec_type varchar(30),
   start_datetime    TIMESTAMP,
   update_datetime   TIMESTAMP,
   owner_key         INT
@@ -105,6 +106,7 @@ CREATE TABLE dv_schedule_task_queue_history
   task_level        INT,
   process_status    VARCHAR(50),
   script            TEXT,
+  exec_type varchar(30),
   start_datetime    TIMESTAMP,
   update_datetime   TIMESTAMP,
   owner_key         INT,
@@ -191,9 +193,7 @@ BEGIN
     THEN
       -- 1. business_rule/ stage table
       -- if it is stored procedure then different
-      SELECT (CASE WHEN business_rule_type = 'procedure'
-        THEN 'select '
-              ELSE '' END) || business_rule_logic
+      SELECT business_rule_logic
       INTO sql_v
       FROM dv_business_rule
       WHERE business_rule_key = object_key_in
@@ -345,6 +345,7 @@ BEGIN
                                       task_level,
                                       process_status,
                                       script,
+                                      exec_type,
                                       start_datetime,
                                       owner_key)
     SELECT
@@ -355,6 +356,7 @@ BEGIN
       v.task_level,
       process_status_v,
       v.load_script AS script,
+      v.object_type,
       start_time_v,
       v.owner_key
     FROM dv_schedule_valid_tasks v
@@ -385,21 +387,25 @@ CREATE OR REPLACE FUNCTION dv_run_next_schedule_task(job_id_in INT, schedule_key
   RETURNS INT
 AS $body$
 DECLARE
-  exec_script_v  TEXT;
-  task_key_v     INT;
-  job_id_v       INT :=job_id_in;
-  schedule_key_v INT :=schedule_key_in;
-  status_v       VARCHAR :='done';
+  exec_script_v    TEXT;
+  sql_v            TEXT;
+  task_key_v       INT;
+  job_id_v         INT :=job_id_in;
+  schedule_key_v   INT :=schedule_key_in;
+  status_v         VARCHAR :='done';
+  exec_type_v      VARCHAR(30);
+  exec_script_l2_v TEXT;
 BEGIN
 
   -- identify first task to run
 
   SELECT
     coalesce(min(schedule_task_key), -1),
-    min(script)
-  INTO task_key_v, exec_script_v
+    min(script),
+    min(exec_type)
+  INTO task_key_v, exec_script_v, exec_type_v
   FROM dv_schedule_task_queue
-  WHERE job_id = job_id_in  AND parent_task_key = parent_task_key_in and schedule_key=schedule_key_in;
+  WHERE job_id = job_id_in AND parent_task_key = parent_task_key_in AND schedule_key = schedule_key_in;
 
   IF task_key_v <> -1
   THEN
@@ -415,7 +421,16 @@ BEGIN
       WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
 
       -- run execute statement if successfull then done
-      EXECUTE exec_script_v;
+
+      EXECUTE exec_script_v
+      INTO exec_script_l2_v;
+
+      -- second round of execution
+      IF exec_type_v <> 'procedure'
+      THEN
+        EXECUTE exec_script_l2_v;
+      END IF;
+
       EXCEPTION WHEN OTHERS
       THEN
         -- if fails update status
@@ -466,6 +481,7 @@ BEGIN
                                                 task_level,
                                                 process_status,
                                                 script,
+                                                exec_type,
                                                 start_datetime,
                                                 owner_key, insert_datetime)
       SELECT
@@ -476,6 +492,7 @@ BEGIN
         task_level,
         process_status,
         script,
+        exec_type,
         start_datetime,
         owner_key,
         now()
@@ -499,7 +516,8 @@ BEGIN
   IF new.process_status = 'done'
   THEN
 
-    SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.parent_task_key)
+     RAISE NOTICE 'Executing task..-->%',new.schedule_key;
+    SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.schedule_task_key)
     INTO result_v;
 
   END IF;
