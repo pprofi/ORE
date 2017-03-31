@@ -204,9 +204,9 @@ BEGIN
     THEN
       -- 2. hub
       SELECT DISTINCT
-        'select ore_config.dv_config_dv_load_hub("' || st.stage_table_schema || '","' || st.stage_table_name || '","' ||
-        h.hub_schema || '","' ||
-        h.hub_name || '");'
+        'select ore_config.dv_config_dv_load_hub(''' || st.stage_table_schema || ''',''' || st.stage_table_name || ''',''' ||
+        h.hub_schema || ''',''' ||
+        h.hub_name || ''');'
       INTO sql_v
       FROM dv_hub h
         JOIN dv_hub_key_column hk ON h.hub_key = hk.hub_key
@@ -219,8 +219,8 @@ BEGIN
     THEN
       -- 3. satellite
       SELECT DISTINCT
-        'select ore_config.dv_config_dv_load_satellite("' || st.stage_table_schema || '","' || st.stage_table_name || '","' ||
-        s.satellite_schema || '","' || s.satellite_name || '","' || load_type_in || '");'
+        'select ore_config.dv_config_dv_load_satellite(''' || st.stage_table_schema || ''',''' || st.stage_table_name || ''',''' ||
+        s.satellite_schema || ''',''' || s.satellite_name || ''',''' || load_type_in || ''');'
       INTO sql_v
       FROM dv_satellite s
         JOIN dv_satellite_column sc ON sc.satellite_key = s.satellite_key
@@ -421,15 +421,20 @@ BEGIN
       WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
 
       -- run execute statement if successfull then done
+        RAISE NOTICE 'Executing task..-->%',task_key_v;
+        RAISE NOTICE 'Executing type..-->%',exec_type_v;
+        RAISE NOTICE 'Executing task script-->%',exec_script_v;
 
       EXECUTE exec_script_v
       INTO exec_script_l2_v;
-
+     RAISE NOTICE 'Executing task script-->%',exec_script_l2_v;
       -- second round of execution
-      IF exec_type_v <> 'procedure'
+      IF exec_type_v <> 'business_rule_proc'
       THEN
         EXECUTE exec_script_l2_v;
       END IF;
+
+      status_v:='done';
 
       EXCEPTION WHEN OTHERS
       THEN
