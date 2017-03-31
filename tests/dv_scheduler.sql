@@ -188,8 +188,8 @@ DECLARE
   sql_v TEXT;
 BEGIN
 
-  CASE object_type_in
-    WHEN 'business_rule'
+  CASE
+    WHEN object_type_in in ('business_rule' , 'business_rule_proc')
     THEN
       -- 1. business_rule/ stage table
       -- if it is stored procedure then different
@@ -200,7 +200,7 @@ BEGIN
             AND is_retired = false
             AND owner_key = owner_key_in;
 
-    WHEN 'hub'
+    WHEN object_type_in='hub'
     THEN
       -- 2. hub
       SELECT DISTINCT
@@ -215,7 +215,7 @@ BEGIN
         JOIN dv_stage_table st ON st.stage_table_key = sc.stage_table_key
       WHERE h.owner_key = owner_key_in AND h.is_retired = false AND st.is_retired = false AND sc.is_retired = false
             AND st.stage_table_key = object_key_in;
-    WHEN 'satellite'
+    WHEN object_type_in='satellite'
     THEN
       -- 3. satellite
       SELECT DISTINCT
