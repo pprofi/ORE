@@ -359,13 +359,12 @@ BEGIN
       v.owner_key
     FROM dv_schedule_valid_tasks v
       JOIN src ON v.schedule_key = src.schedule_key
-  RETURNING v.schedule_key
-    INTO schedule_key_v;
+ ;
 
   -- updates first task to trigger schedule execution
   UPDATE dv_schedule_task_queue q
   SET process_status = 'done', update_datetime = now()
-  WHERE q.job_id = job_id_in AND q.schedule_key = schedule_key_v
+  WHERE q.job_id = job_id_in
         AND q.parent_task_key IS NULL
         AND NOT exists(SELECT 1
                        FROM dv_schedule_task_queue d
@@ -397,16 +396,17 @@ BEGIN
 
   SELECT
     coalesce(min(schedule_task_key), -1),
-    script
+    min(script)
   INTO task_key_v, exec_script_v
   FROM dv_schedule_task_queue
-  WHERE job_id = job_id_in AND schedule_key = schedule_key_in AND parent_task_key = parent_task_key_in;
+  WHERE job_id = job_id_in  AND parent_task_key = parent_task_key_in and schedule_key=schedule_key_in;
 
   IF task_key_v <> -1
   THEN
 
     -- separate transaction for error handling
     BEGIN
+
 
       status_v:='processing';
 
@@ -516,3 +516,53 @@ LANGUAGE plpgsql;
 CREATE TRIGGER dv_schedule_task_queue_tgu
 AFTER UPDATE ON dv_schedule_task_queue
 FOR EACH ROW EXECUTE PROCEDURE dv_init_schedule_task_run();
+
+
+CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in VARCHAR, table_name_in VARCHAR,
+                                                        operation_in    VARCHAR)
+  RETURNS TEXT AS
+$BODY$
+DECLARE
+  process_status_to_v   VARCHAR(30) :=operation_in;
+  process_status_from_v VARCHAR(30);
+  sql_v                 TEXT;
+BEGIN
+
+  CASE operation_in
+    WHEN 'PROCESSING'
+    THEN
+      process_status_from_v:='RAW';
+    WHEN 'DONE'
+    THEN
+      process_status_from_v:='PROCESSING';
+  ELSE
+    NULL;
+  END CASE;
+
+  sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=''' || process_status_to_v ||
+         ''' where dv_process_status=''' || process_status_from_v || ''';';
+
+  RETURN sql_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION fn_source_cleanup(table_schema_in VARCHAR, table_name_in VARCHAR)
+  RETURNS TEXT AS
+-- removes processed data from stage and source tables
+$BODY$
+DECLARE
+  sql_v            TEXT;
+  process_status_v VARCHAR :='DONE';
+BEGIN
+
+  sql_v:='delete from ' || table_schema_in || '.' || table_name_in || ' where  dv_process_status=' || process_status_v
+         || ';';
+
+  RETURN sql_v;
+
+END
+$BODY$
+LANGUAGE plpgsql;
