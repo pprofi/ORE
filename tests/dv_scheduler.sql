@@ -407,6 +407,8 @@ BEGIN
   FROM dv_schedule_task_queue
   WHERE job_id = job_id_in AND parent_task_key = parent_task_key_in AND schedule_key = schedule_key_in;
 
+   RAISE NOTICE 'Executing task..-->%',task_key_v;
+
   IF task_key_v <> -1
   THEN
 
@@ -444,8 +446,8 @@ BEGIN
   ELSE
     -- if no child tasks check if there are another jobs for this schedule queued minimum of jobs_id
     SELECT
-      coalesce(schedule_task_key, -1),
-      coalesce(job_id, -1)
+      coalesce(min(schedule_task_key), -1),
+      coalesce(min(job_id), -1)
     INTO task_key_v, job_id_v
     FROM (
            SELECT
@@ -521,7 +523,9 @@ BEGIN
   IF new.process_status = 'done'
   THEN
 
-     RAISE NOTICE 'Executing task..-->%',new.schedule_key;
+     RAISE NOTICE 'Executing schedule..-->%',new.schedule_key;
+    RAISE NOTICE 'Executing job_id..-->%',new.job_id;
+    RAISE NOTICE 'Executing task_key..-->%', new.schedule_task_key;
     SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.schedule_task_key)
     INTO result_v;
 
