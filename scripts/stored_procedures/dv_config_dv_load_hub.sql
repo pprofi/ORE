@@ -52,7 +52,8 @@ BEGIN
     SELECT
       stc.column_name            stage_col_name,
       hkc.hub_key_column_name    hub_col_name,
-      hkc.hub_key_column_type AS column_type
+      hkc.hub_key_column_type AS column_type,
+      1 as is_bk
     FROM dv_stage_table st
       JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
       JOIN dv_hub_column hc ON hc.column_key = stc.column_key
@@ -72,7 +73,8 @@ BEGIN
       ELSE quote_literal(stage_table_schema_in || '.' || stage_table_name_in)
       END         AS stage_col_name,
       column_name AS hub_col_name,
-      column_type
+      column_type,
+      0 as is_bk
     FROM fn_get_dv_object_default_columns(hub_name_in, 'hub')
     WHERE is_key = 0
   )
@@ -92,13 +94,9 @@ BEGIN
          FROM sql
          -- GROUP BY sql.hub_schema, fn_get_object_name(sql.hub_name, 'hub')
          UNION ALL
-         SELECT DISTINCT 'select * from src' || E'\n' || 'on conflict(' || (SELECT column_name
-                                                                            FROM fn_get_dv_object_default_columns(
-                                                                                hub_name_in,
-                                                                                'hub',
-                                                                                'Object_Key')) ||
+         SELECT DISTINCT 'select * from src' || E'\n' || 'on conflict(' || array_to_string(array_agg(sql.hub_col_name), ', ') ||
                          ') ' || 'do nothing;' || E'\n'
-         FROM sql) t
+         FROM sql where is_bk=1) t
   INTO sql_block_body_v;
 
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
