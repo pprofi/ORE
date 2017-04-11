@@ -506,7 +506,7 @@ BEGIN
                                                 process_status,
                                                 script,
                                                 exec_type,
-                                                start_datetime,
+                                                start_datetime,update_datetime,
                                                 owner_key, insert_datetime)
       SELECT
         job_id,
@@ -518,6 +518,7 @@ BEGIN
         script,
         exec_type,
         start_datetime,
+        update_datetime,
         owner_key,
         now()
       FROM del;
@@ -645,7 +646,7 @@ BEGIN
 
   -- prepare query
   sql_v:=
-  'select ore_config.dv_load_source_status_update(''' || conn_name_in || ''',''' || job_id_in || ',''' || owner_name_in
+  'select ore_config.dv_load_source_status_update(''' || conn_name_in || ''',' || job_id_in || ',''' || owner_name_in
   || ''',''' || system_name_in
   || ''',''' ||
   table_schema_in || ''',''' || table_name_in || ''')';
