@@ -593,3 +593,56 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
+
+
+-- wrapper for executing queries
+-- dblink
+
+CREATE OR REPLACE FUNCTION dv_load_source_status_update_wrapper(hostname_in     VARCHAR,
+                                                                dbname_in       VARCHAR,
+                                                                port_in         VARCHAR,
+                                                                user_in         VARCHAR,
+                                                                pwd_in          VARCHAR,
+                                                                job_id_in       INT,
+                                                                owner_name_in   VARCHAR(100),
+                                                                system_name_in  VARCHAR(100),
+                                                                table_schema_in VARCHAR(100),
+                                                                table_name_in   VARCHAR(100))
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  result_v      INT;
+  conn_name_v   VARCHAR(20) :='wrapper';
+  conn_string_v VARCHAR(200);
+  sql_v         TEXT;
+BEGIN
+
+  SET search_path TO ore_config;
+  -- connection string
+  conn_string_v:=
+  'dbname=' || dbname_in || ' port=' || port_in || ' host=' || hostname_in || ' user=' || user_in || ' password=' ||
+  pwd_in;
+
+  -- prepare query
+  sql_v:=
+  'select ore_config.dv_load_source_status_update(' || job_id_in || ',''' || owner_name_in || ''',''' || system_name_in
+  || ''',''' ||
+  table_schema_in || ''',''' || table_name_in || ''')';
+
+  -- opening connection
+  SELECT dblink_connect(conn_name_v, conn_string_v)
+  INTO result_v;
+
+  -- calling procedure to update load status
+  SELECT dblink_send_query(conn_name_v, sql_v)
+  INTO result_v;
+
+  -- disconnect
+  SELECT dblink_disconnect(conn_name_v)
+  INTO result_v;
+
+  RETURN;
+
+END
+$BODY$
+LANGUAGE plpgsql;
