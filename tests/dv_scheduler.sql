@@ -303,18 +303,24 @@ CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
 
 -- for external call
 -- updates source load status and triggers the schedule execution
-CREATE OR REPLACE FUNCTION dv_load_source_status_update(job_id_in       INT, owner_name_in VARCHAR(100),
-                                                        system_name_in  VARCHAR(100),
-                                                        table_schema_in VARCHAR(100),
-                                                        table_name_in   VARCHAR(100))
+CREATE OR REPLACE FUNCTION dv_load_source_status_update(
+  conn_name_in    VARCHAR,
+  job_id_in       INT, owner_name_in VARCHAR(100),
+  system_name_in  VARCHAR(100),
+  table_schema_in VARCHAR(100),
+  table_name_in   VARCHAR(100))
   RETURNS VOID AS
 $BODY$
 DECLARE
-  owner_key_v      INTEGER;
-  start_time_v     TIMESTAMP;
-  process_status_v VARCHAR(20) :='queued';
-  schedule_key_v   INT;
+  owner_key_v          INTEGER;
+  start_time_v         TIMESTAMP;
+  process_status_v     VARCHAR(20) :='queued';
+  schedule_key_v       INT;
+  state_v              VARCHAR;
+  is_open_connection_v BOOL;
 BEGIN
+
+  SET SEARCH_PATH TO ore_config;
 
   start_time_v:=now();
   -- find owner key
@@ -360,8 +366,7 @@ BEGIN
       start_time_v,
       v.owner_key
     FROM dv_schedule_valid_tasks v
-      JOIN src ON v.schedule_key = src.schedule_key
- ;
+      JOIN src ON v.schedule_key = src.schedule_key;
 
   -- updates first task to trigger schedule execution
   UPDATE dv_schedule_task_queue q
@@ -375,6 +380,18 @@ BEGIN
                              AND d.start_datetime < q.start_datetime
   );
 
+  -- check if procedure was iniciated externally via dblink
+  IF conn_name_in IS NOT NULL
+  THEN
+    SELECT conn_name_in = ANY (dblink_get_connections())
+    INTO is_open_connection_v;
+
+    IF is_open_connection_v = TRUE
+    THEN
+      SELECT dblink_disconnect(conn_name_in)
+      INTO state_v;
+    END IF;
+  END IF;
   -- need to check if there is another job for this schedule is running and update status appropriately
 END
 $BODY$
@@ -598,21 +615,24 @@ LANGUAGE plpgsql;
 -- wrapper for executing queries
 -- dblink
 
-CREATE OR REPLACE FUNCTION dv_load_source_status_update_wrapper(hostname_in     VARCHAR,
-                                                                dbname_in       VARCHAR,
-                                                                port_in         VARCHAR,
-                                                                user_in         VARCHAR,
-                                                                pwd_in          VARCHAR,
-                                                                job_id_in       INT,
-                                                                owner_name_in   VARCHAR(100),
-                                                                system_name_in  VARCHAR(100),
-                                                                table_schema_in VARCHAR(100),
-                                                                table_name_in   VARCHAR(100))
+CREATE OR REPLACE FUNCTION dv_load_source_status_update_wrapper(
+  conn_name_in    VARCHAR,
+  hostname_in     VARCHAR,
+  dbname_in       VARCHAR,
+  port_in         VARCHAR,
+  user_in         VARCHAR,
+  pwd_in          VARCHAR,
+  job_id_in       INT,
+  owner_name_in   VARCHAR(100),
+  system_name_in  VARCHAR(100),
+  table_schema_in VARCHAR(100),
+  table_name_in   VARCHAR(100))
   RETURNS VOID AS
 $BODY$
 DECLARE
   result_v      INT;
-  conn_name_v   VARCHAR(20) :='wrapper';
+  state_v       TEXT;
+  conn_name_v   VARCHAR(20) :=conn_name_in;
   conn_string_v VARCHAR(200);
   sql_v         TEXT;
 BEGIN
@@ -625,21 +645,23 @@ BEGIN
 
   -- prepare query
   sql_v:=
-  'select ore_config.dv_load_source_status_update(' || job_id_in || ',''' || owner_name_in || ''',''' || system_name_in
+  'select ore_config.dv_load_source_status_update(''' || conn_name_in || ''',''' || job_id_in || ',''' || owner_name_in
+  || ''',''' || system_name_in
   || ''',''' ||
   table_schema_in || ''',''' || table_name_in || ''')';
 
   -- opening connection
   SELECT dblink_connect(conn_name_v, conn_string_v)
-  INTO result_v;
+  INTO state_v;
 
   -- calling procedure to update load status
   SELECT dblink_send_query(conn_name_v, sql_v)
   INTO result_v;
 
-  -- disconnect
+  /*-- disconnect
   SELECT dblink_disconnect(conn_name_v)
-  INTO result_v;
+  INTO state_v;
+*/
 
   RETURN;
 
