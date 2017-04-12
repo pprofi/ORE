@@ -593,7 +593,7 @@ CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in VARCHAR,
 $BODY$
 DECLARE
   process_status_to_v   VARCHAR(30) :=operation_in;
-  process_status_from_v VARCHAR(30);
+  process_status_from_v VARCHAR(100);
   sql_v                 TEXT;
 BEGIN
 
