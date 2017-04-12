@@ -600,16 +600,16 @@ BEGIN
   CASE operation_in
     WHEN 'PROCESSING'
     THEN
-      process_status_from_v:='RAW';
+      process_status_from_v:='RAW'''||' or dv_process_status is null';
     WHEN 'DONE'
     THEN
-      process_status_from_v:='PROCESSING';
+      process_status_from_v:='PROCESSING''';
   ELSE
     NULL;
   END CASE;
 
   sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=''' || process_status_to_v ||
-         ''' where dv_process_status=''' || process_status_from_v || ''';';
+         ''' where dv_process_status=''' || process_status_from_v || ';';
 
   RETURN sql_v;
 
@@ -641,7 +641,6 @@ LANGUAGE plpgsql;
 -- dblink
 
 CREATE OR REPLACE FUNCTION ore_config.dv_load_source_status_update_wrapper(
-  conn_name_in    VARCHAR,
   hostname_in     VARCHAR,
   dbname_in       VARCHAR,
   port_in         VARCHAR,
@@ -657,7 +656,7 @@ $BODY$
 DECLARE
   result_v      INT;
   state_v       TEXT;
-  conn_name_v   VARCHAR(20) :=conn_name_in;
+  conn_name_v   VARCHAR(20) :=job_id_in;
   conn_string_v VARCHAR(200);
   sql_v         TEXT;
 
@@ -671,7 +670,7 @@ BEGIN
 
   -- prepare query
   sql_v:=
-  'select ore_config.dv_load_source_status_update(''' || conn_name_in || ''',' || job_id_in || ',''' || owner_name_in
+  'select ore_config.dv_load_source_status_update(''' || conn_name_v || ''',' || job_id_in || ',''' || owner_name_in
   || ''',''' || system_name_in
   || ''',''' ||
   table_schema_in || ''',''' || table_name_in || ''')';
