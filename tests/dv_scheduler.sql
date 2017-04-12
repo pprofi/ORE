@@ -318,6 +318,7 @@ DECLARE
   schedule_key_v       INT;
   state_v              VARCHAR;
   is_open_connection_v BOOL;
+  proc_v varchar(50):='dv_load_source_status_update';
 BEGIN
 
   SET SEARCH_PATH TO ore_config;
@@ -390,6 +391,10 @@ BEGIN
     THEN
       SELECT dblink_disconnect(conn_name_in)
       INTO state_v;
+
+       INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'Disconnected -->'||conn_name_in||';'||state_v);
+
     END IF;
   END IF;
   -- need to check if there is another job for this schedule is running and update status appropriately
@@ -412,6 +417,7 @@ DECLARE
   status_v         VARCHAR :='done';
   exec_type_v      VARCHAR(30);
   exec_script_l2_v TEXT;
+  proc_v varchar(50):='dv_run_next_schedule_task';
 BEGIN
 
   -- identify first task to run
@@ -425,6 +431,9 @@ BEGIN
   WHERE job_id = job_id_in AND parent_task_key = parent_task_key_in AND schedule_key = schedule_key_in;
 
    RAISE NOTICE 'Executing task..-->%',task_key_v;
+
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'Schedule task -->'||task_key_v);
 
   IF task_key_v <> -1
   THEN
@@ -444,13 +453,21 @@ BEGIN
         RAISE NOTICE 'Executing type..-->%',exec_type_v;
         RAISE NOTICE 'Executing task script-->%',exec_script_v;
 
+    INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'Schedule task -->'||task_key_v||'; type-->'||exec_type_v||'script-->'||exec_script_v);
+
       EXECUTE exec_script_v
       INTO exec_script_l2_v;
      RAISE NOTICE 'Executing task script-->%',exec_script_l2_v;
+
+
       -- second round of execution
       IF exec_type_v <> 'business_rule_proc'
       THEN
         EXECUTE exec_script_l2_v;
+
+    INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'Execute script -->'||exec_script_l2_v);
       END IF;
 
       status_v:='done';
@@ -537,13 +554,20 @@ CREATE OR REPLACE FUNCTION dv_init_schedule_task_run()
 AS $body$
 DECLARE
   result_v INT;
+  proc_v varchar(50):='dv_init_schedule_task_run';
 BEGIN
+
+
   IF new.process_status = 'done'
   THEN
 
-     RAISE NOTICE 'Executing schedule..-->%',new.schedule_key;
+    RAISE NOTICE 'Executing schedule..-->%',new.schedule_key;
     RAISE NOTICE 'Executing job_id..-->%',new.job_id;
     RAISE NOTICE 'Executing task_key..-->%', new.schedule_task_key;
+
+    INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'Schedule-->'||new.schedule_key||'; job_id-->'||new.job_id||'task_key-->'||new.schedule_task_key);
+
     SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.schedule_task_key)
     INTO result_v;
 
@@ -616,7 +640,7 @@ LANGUAGE plpgsql;
 -- wrapper for executing queries
 -- dblink
 
-CREATE OR REPLACE FUNCTION dv_load_source_status_update_wrapper(
+CREATE OR REPLACE FUNCTION ore_config.dv_load_source_status_update_wrapper(
   conn_name_in    VARCHAR,
   hostname_in     VARCHAR,
   dbname_in       VARCHAR,
@@ -636,6 +660,7 @@ DECLARE
   conn_name_v   VARCHAR(20) :=conn_name_in;
   conn_string_v VARCHAR(200);
   sql_v         TEXT;
+
 BEGIN
 
   SET search_path TO ore_config;
@@ -655,9 +680,21 @@ BEGIN
   SELECT dblink_connect(conn_name_v, conn_string_v)
   INTO state_v;
 
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), 'ore_config.dv_load_source_status_update_wrapper', state_v);
+
   -- calling procedure to update load status
   SELECT dblink_send_query(conn_name_v, sql_v)
   INTO result_v;
+
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), 'ore_config.dv_load_source_status_update_wrapper', result_v);
+
+  SELECT dblink_is_busy(conn_name_v)
+  INTO state_v;
+
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), 'ore_config.dv_load_source_status_update_wrapper', conn_name_v || ';' || state_v);
 
   /*-- disconnect
   SELECT dblink_disconnect(conn_name_v)
@@ -669,3 +706,13 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
+
+
+
+create table ore_config.dv_log
+(
+  log_datetime TIMESTAMP,
+  log_proc text,
+  message text
+
+);
