@@ -304,7 +304,7 @@ CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
 -- for external call
 -- updates source load status and triggers the schedule execution
 CREATE OR REPLACE FUNCTION dv_load_source_status_update(
-  conn_name_in    VARCHAR,
+  conn_name_in    VARCHAR(200),
   job_id_in       INT, owner_name_in VARCHAR(100),
   system_name_in  VARCHAR(100),
   table_schema_in VARCHAR(100),
@@ -317,7 +317,7 @@ DECLARE
   process_status_v     VARCHAR(20) :='queued';
   schedule_key_v       INT;
   state_v              VARCHAR;
-  is_open_connection_v BOOL;
+  is_open_connection_v BOOLean;
   proc_v varchar(50):='dv_load_source_status_update';
 BEGIN
 
@@ -382,12 +382,22 @@ BEGIN
   );
 
   -- check if procedure was iniciated externally via dblink
+
+   INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'Connection to disconnect-->'||conn_name_in);
+
   IF conn_name_in IS NOT NULL
   THEN
     SELECT conn_name_in = ANY (dblink_get_connections())
     INTO is_open_connection_v;
 
-    IF is_open_connection_v = TRUE
+
+     is_open_connection_v:=TRUE;
+
+    INSERT INTO dv_log (log_datetime, log_proc, message)
+    VALUES (now(), proc_v, 'is open connection to disconnect-->'||is_open_connection_v);
+
+    IF is_open_connection_v
     THEN
       SELECT dblink_disconnect(conn_name_in)
       INTO state_v;
@@ -566,7 +576,7 @@ BEGIN
     RAISE NOTICE 'Executing task_key..-->%', new.schedule_task_key;
 
     INSERT INTO dv_log (log_datetime, log_proc, message)
-    VALUES (now(), proc_v, 'Schedule-->'||new.schedule_key||'; job_id-->'||new.job_id||'task_key-->'||new.schedule_task_key);
+    VALUES (now(), proc_v, 'Schedule-->'||new.schedule_key||'; job_id-->'||new.job_id||';task_key-->'||new.schedule_task_key);
 
     SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.schedule_task_key)
     INTO result_v;
@@ -656,8 +666,8 @@ $BODY$
 DECLARE
   result_v      INT;
   state_v       TEXT;
-  conn_name_v   VARCHAR(20) :=job_id_in;
-  conn_string_v VARCHAR(200);
+  conn_name_v   VARCHAR(2000) :=job_id_in;
+  conn_string_v text;
   sql_v         TEXT;
 
 BEGIN
@@ -668,12 +678,18 @@ BEGIN
   'dbname=' || dbname_in || ' port=' || port_in || ' host=' || hostname_in || ' user=' || user_in || ' password=' ||
   pwd_in;
 
+   INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), 'ore_config.dv_load_source_status_update_wrapper', conn_string_v);
+
   -- prepare query
   sql_v:=
   'select ore_config.dv_load_source_status_update(''' || conn_name_v || ''',' || job_id_in || ',''' || owner_name_in
   || ''',''' || system_name_in
   || ''',''' ||
   table_schema_in || ''',''' || table_name_in || ''')';
+
+   INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), 'ore_config.dv_load_source_status_update_wrapper', sql_v);
 
   -- opening connection
   SELECT dblink_connect(conn_name_v, conn_string_v)
@@ -691,6 +707,7 @@ BEGIN
 
   SELECT dblink_is_busy(conn_name_v)
   INTO state_v;
+
 
   INSERT INTO dv_log (log_datetime, log_proc, message)
   VALUES (now(), 'ore_config.dv_load_source_status_update_wrapper', conn_name_v || ';' || state_v);
@@ -715,3 +732,161 @@ create table ore_config.dv_log
   message text
 
 );
+
+
+CREATE OR REPLACE FUNCTION dv_log_write(proc_name_in TEXT, message_in TEXT)
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  result_v      INT;
+  state_v       TEXT;
+  conn_name_v   VARCHAR(20) :='log_'||floor(random()*100000);
+  conn_string_v TEXT;
+  sql_v         TEXT;
+
+BEGIN
+
+
+  SELECT dblink_connect(conn_name_v)
+  INTO state_v;
+
+  sql_v:='INTO ore_config.dv_log (log_datetime, log_proc, message) VALUES (' || 'now(),' || proc_name_in || ',' || message_in || ')';
+
+  -- calling procedure to update load status
+  SELECT dblink_send_query(conn_name_v, sql_v)
+  INTO result_v;
+
+  SELECT dblink_disconnect(conn_name_v)
+  INTO state_v;
+
+  RETURN;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+
+CREATE OR REPLACE FUNCTION dv_log_write(conn_name_in varchar,proc_name_in TEXT, message_in TEXT)
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  result_v      INT;
+  state_v       TEXT;
+  conn_name_v   VARCHAR(200) :=conn_name_in;
+  conn_string_v TEXT;
+  sql_v         TEXT;
+
+BEGIN
+
+  sql_v:='insert INTO ore_config.dv_log (log_datetime, log_proc, message) VALUES (' || 'now(),' || proc_name_in || ',' || message_in || ')';
+
+  -- calling procedure to update load status
+  SELECT dblink_send_query(conn_name_v, sql_v)
+  INTO result_v;
+
+  SELECT dblink_disconnect(conn_name_v)
+  INTO state_v;
+
+  RETURN;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+CREATE SEQUENCE dv_job_id_seq START 1;
+
+
+CREATE OR REPLACE FUNCTION dv_load_source_status_update(
+  -- job_id_in       INT,
+  owner_name_in   VARCHAR(100),
+  system_name_in  VARCHAR(100),
+  table_schema_in VARCHAR(100),
+  table_name_in   VARCHAR(100))
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  owner_key_v          INTEGER;
+  start_time_v         TIMESTAMP;
+  process_status_v     VARCHAR(20) :='queued';
+  schedule_key_v       INT;
+  state_v              VARCHAR;
+  is_open_connection_v BOOL;
+  proc_v               VARCHAR(50) :='dv_load_source_status_update';
+  job_id_v             INT;
+BEGIN
+
+  SET SEARCH_PATH TO ore_config;
+
+  SELECT nextval('dv_job_id_seq' :: REGCLASS)
+  INTO job_id_v;
+
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), proc_v, 'Starting loading ...');
+
+  start_time_v:=now();
+  -- find owner key
+  SELECT owner_key
+  INTO owner_key_v
+  FROM dv_owner
+  WHERE owner_name = owner_name_in;
+
+  -- find related schedule tasks for source
+
+  -- select tasks for execution
+  -- queued process state
+  WITH src AS (
+      SELECT
+        S.schedule_task_key AS task_key,
+        s.schedule_key
+      FROM dv_schedule_task S
+        JOIN dv_source_table st ON S.object_key = st.source_table_key
+        JOIN dv_source_system ss ON st.system_key = ss.source_system_key
+      WHERE S.object_type = 'source' AND S.owner_key = owner_key_v
+            AND ss.source_system_name = system_name_in
+            AND st.source_table_schema = table_schema_in
+            AND st.source_table_name = table_name_in)
+  INSERT INTO dv_schedule_task_queue (job_id,
+                                      schedule_key,
+                                      schedule_task_key,
+                                      parent_task_key,
+                                      task_level,
+                                      process_status,
+                                      script,
+                                      exec_type,
+                                      start_datetime,
+                                      owner_key)
+    SELECT
+      job_id_v,
+      v.schedule_key,
+      v.schedule_task_key,
+      v.parent_task_key,
+      v.task_level,
+      process_status_v,
+      v.load_script AS script,
+      v.object_type,
+      start_time_v,
+      v.owner_key
+    FROM dv_schedule_valid_tasks v
+      JOIN src ON v.schedule_key = src.schedule_key;
+
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), proc_v, 'Load finished.');
+
+  -- updates first task to trigger schedule execution
+  UPDATE dv_schedule_task_queue q
+  SET process_status = 'done', update_datetime = now()
+  WHERE q.job_id = job_id_v
+        AND q.parent_task_key IS NULL
+        AND NOT exists(SELECT 1
+                       FROM dv_schedule_task_queue d
+                       WHERE d.schedule_key = q.schedule_key AND d.job_id <> job_id_v AND
+                             d.process_status IN ('queued', 'processing')
+                             AND d.start_datetime < q.start_datetime
+  );
+
+  -- need to check if there is another job for this schedule is running and update status appropriately
+END
+$BODY$
+LANGUAGE plpgsql;
