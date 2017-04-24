@@ -163,24 +163,164 @@ END
 $BODY$
 LANGUAGE plpgsql;
 
+
+
 -- phase 2
 --  file 2 add all column contents
-create or replace function dv_model_l2_load()
-RETURNS VOID AS
+CREATE OR REPLACE FUNCTION dv_model_l2_load()
+  RETURNS VOID AS
 $BODY$
 DECLARE
-begin
+  r                RECORD;
+  owner_key_v      INT;
+  release_number_v INT;
+  release_key_v INT;
+  object_key_v     INT;
+  object_v         VARCHAR [] [];
+  suffix_v         VARCHAR;
+BEGIN
+  -- loop through all columns
+
+  FOR r IN (SELECT *
+            FROM dv_model_L2_contents) LOOP
+
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [8, 2]);
+
+    EXECUTE 'select release_number, owner_key, ' || r.object_type || '_key from dv_' || r.object_type || ' where ' ||
+            r.object_type || '_schema=''' ||
+            r.object_schema || ''' and ' || r.object_type || '_name=''' || r.object_name || ''''
+    INTO release_key_v, owner_key_v, object_key_v;
+
+    select release_number
+    into release_number_v
+    from dv_release
+      where release_key=release_key_v;
+
+    suffix_v :=CASE WHEN r.object_type = 'hub'
+      THEN 'hub_key_'
+               ELSE '' END;
+
+    object_v [1] [1]:='release_number';
+    object_v [1] [2]:=release_number_v;
+    object_v [2] [1]:='owner_key';
+    object_v [2] [2]:= owner_key_v;
+    object_v [3] [1]:=r.object_type || '_key';
+    object_v [3] [1]:=object_key_v;
+
+    object_v [4] [1]:= suffix_v || 'column_name';
+    object_v [4] [2]:= r.column_name;
+    object_v [5] [1]:=suffix_v || 'column_type';
+    object_v [5] [2]:= r.column_type;
+    object_v [6] [1]:=suffix_v || 'column_length';
+    object_v [6] [2]:= r.column_length;
+    object_v [7] [1]:=suffix_v || 'column_precision';
+    object_v [7] [2]:= r.column_precision;
+    object_v [8] [1]:=suffix_v || 'column_scale';
+    object_v [8] [2]:= r.column_scale;
+
+    SELECT dv_config_object_insert('dv_' || CASE WHEN r.object_type = 'hub'
+      THEN suffix_v
+                                            ELSE r.object_type || '_' END || 'column',
+                                   object_v);
+
+
+  END LOOP;
 END
 $BODY$
 LANGUAGE plpgsql;
 
+
+create table dv_model_L3_mapping
+(
+ mapping_type varchar,
+ object_name_in varchar,
+ object_schema_in varchar,
+ column_name_in varchar,
+ object_name_out varchar,
+ object_schema_out varchar,
+ column_name_out varchar
+);
+
+SELECT dv_config_object_insert('dv_hub_column',
+                               '{{"hub_key_column_key","2"},{"column_key","12"},
+                                {"release_number","0"},{"owner_key","1"}}');
+
+SELECT dv_config_object_insert('dv_satellite_column',
+                               '{{"satellite_key","1"},{"column_key","11"},
+                                {"release_number","20170316"},{"owner_key","2"}}');
+
 -- phase 3
 -- file 3 add mappings
-create or replace function dv_model_l1_load()
-RETURNS VOID AS
+CREATE OR REPLACE FUNCTION dv_model_l3_load()
+  RETURNS VOID AS
 $BODY$
 DECLARE
-begin
+  r                RECORD;
+  owner_key_v      INT;
+  release_number_v INT;
+  release_key_v    INT;
+  object_key_v     INT;
+  object_v         VARCHAR [] [];
+  column_key_v     INT;
+BEGIN
+
+  FOR r IN (SELECT *
+            FROM dv_model_L3_mapping) LOOP
+
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [4, 2]);
+
+    -- stage table column key
+    SELECT
+      column_key,
+      c.release_key,
+      c.owner_key
+    INTO column_key_v, release_key_v, owner_key_v
+    FROM dv_stage_table st
+      JOIN dv_stage_table_column c ON st.stage_table_key = c.stage_table_key
+    WHERE stage_table_schema = r.object_schema_out AND st.stage_table_name = r.object_name_out AND
+          c.column_name = r.coulumn_name_out;
+
+    -- release number
+    SELECT release_number
+    INTO release_number_v
+    FROM dv_release
+    WHERE release_key = release_key_v;
+
+    -- find mapping object key
+    IF r.mapping_type = 'hub'
+    THEN
+
+      SELECT hub_key_column_key
+      INTO object_key_v
+      FROM dv_hub_key_column hkc
+        JOIN dv_hub h ON h.hub_key = hkc.hub_key
+      WHERE h.hub_name = r.onject_name_in AND h.hub_schema = r.object_schema_in
+      and hkc.hub_key_column_name=r.column_name_in;
+
+      ELSE
+      SELECT satellite_key
+      INTO object_key_v
+      FROM dv_satellite
+      WHERE satellite_name = r.onject_name_in AND satellite_schema = r.object_schema_in;
+    END IF;
+
+    object_v [1] [1]:='release_number';
+    object_v [1] [2]:=release_number_v;
+    object_v [2] [1]:='owner_key';
+    object_v [2] [2]:= owner_key_v;
+    object_v [3] [1]:= CASE WHEN r.mapping_type = 'hub'
+      THEN 'hub_key_column_key'
+                       ELSE 'satellite_key' END;
+    object_v [3] [1]:=object_key_v;
+    object_v [4] [1]:='column_key';
+    object_v [4] [2]:= column_key_v;
+
+   -- add data to config
+    SELECT dv_config_object_insert('dv_' || r.object_type || '_column',
+                                   object_v);
+
+  END LOOP;
+
 END
 $BODY$
 LANGUAGE plpgsql;
