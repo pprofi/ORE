@@ -314,4 +314,14 @@ LANGUAGE plpgsql;
 -- add business rules and schedule-tasks
 -- generate additional rules for stage and source update statuses and
 
---
+create table dv_model_L4_load
+(
+ schedule_name varchar,
+ b_rule_load_type varchar,
+ task_name varchar, --business rule name as well
+ stage_table_schema varchar,
+ stage_table_name varchar,
+ logic text,
+ task_load_type varchar,
+ rn int
+);
