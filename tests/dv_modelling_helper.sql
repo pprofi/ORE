@@ -230,24 +230,6 @@ $BODY$
 LANGUAGE plpgsql;
 
 
-create table dv_model_L3_mapping
-(
- mapping_type varchar,
- object_name_in varchar,
- object_schema_in varchar,
- column_name_in varchar,
- object_name_out varchar,
- object_schema_out varchar,
- column_name_out varchar
-);
-
-SELECT dv_config_object_insert('dv_hub_column',
-                               '{{"hub_key_column_key","2"},{"column_key","12"},
-                                {"release_number","0"},{"owner_key","1"}}');
-
-SELECT dv_config_object_insert('dv_satellite_column',
-                               '{{"satellite_key","1"},{"column_key","11"},
-                                {"release_number","20170316"},{"owner_key","2"}}');
 
 -- phase 3
 -- file 3 add mappings
@@ -333,34 +315,3 @@ LANGUAGE plpgsql;
 -- generate additional rules for stage and source update statuses and
 
 --
-select * FROM
-  (
-SELECT
-       t.table_name,
-c.column_name,
-          c.is_nullable,
-          replace(c.data_type, 'character varying', 'varchar') AS data_type,
-          CASE WHEN c.column_name = kcu.column_name
-            THEN 1
-          ELSE NULL END                                        AS is_key,
-          cast(0 AS INTEGER)                                   AS is_found,
-          column_default
-        FROM information_schema.tables t
-          JOIN information_schema.columns c
-            ON t.table_schema = c.table_schema AND t.table_name = c.table_name
-          LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            ON tc.table_catalog = t.table_catalog
-               AND tc.table_schema = t.table_schema
-               AND tc.table_name = t.table_name
-               AND tc.constraint_type = 'PRIMARY KEY'
-          LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-            ON kcu.table_catalog = tc.table_catalog
-               AND kcu.table_schema = tc.table_schema
-               AND kcu.table_name = tc.table_name
-               AND kcu.constraint_name = tc.constraint_name
-        WHERE t.table_schema = 'ore_config' -- AND t.table_name = object_type_in
-              AND c.column_name NOT IN ('updated_by', 'updated_datetime')) t
-where is_key is null and column_default is null
-and t.table_name in ('dv_owner','dv_hub','dv_release','dv_source_system','dv_source_table','dv_stage_table'
-,'dv_satellite'
-)
