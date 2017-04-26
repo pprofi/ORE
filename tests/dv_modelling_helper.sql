@@ -502,3 +502,25 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
+
+-- modelling helper
+
+CREATE OR REPLACE FUNCTION dv_modeller(owner_name_in     VARCHAR, owner_desc_in VARCHAR,
+                                               release_number_in INT,
+                                               release_desc_in   VARCHAR)
+  RETURNS VOID AS
+$BODY$
+
+BEGIN
+
+  SELECT dv_model_l1_load_design(owner_name_in, owner_desc_in,
+                                 release_number_in,
+                                 release_desc_in);
+  SELECT dv_model_l2_load_contents(release_number_in);
+  SELECT dv_model_l3_load_mappings(release_number_in);
+  SELECT dv_model_l4_load_logic(release_number_in);
+
+
+END
+$BODY$
+LANGUAGE plpgsql;
