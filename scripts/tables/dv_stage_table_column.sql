@@ -12,7 +12,6 @@ CREATE TABLE dv_stage_table_column
   column_precision        INTEGER,
   column_scale            INTEGER,
   collation_name          VARCHAR(128),
-  source_ordinal_position INTEGER                                                                          NOT NULL,
   is_source_date          BOOLEAN DEFAULT FALSE                                                            NOT NULL,
   discard_flag            BOOLEAN DEFAULT FALSE                                                            NOT NULL,
   is_retired              BOOLEAN DEFAULT FALSE                                                            NOT NULL,

@@ -1,18 +1,21 @@
-CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in VARCHAR, table_name_in VARCHAR,
-                                                        operation_in    VARCHAR)
-  RETURNS TEXT AS
-$BODY$
+CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in CHARACTER VARYING,
+                                                        table_name_in   CHARACTER VARYING,
+                                                        operation_in    CHARACTER VARYING)
+  RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
 DECLARE
   process_status_to_v   VARCHAR(30) :=operation_in;
-  process_status_from_v VARCHAR(30);
+  process_status_from_v VARCHAR(100);
   sql_v                 TEXT;
+  is_null_v             VARCHAR(100) :='';
 BEGIN
 
-  -- update processing status
   CASE operation_in
     WHEN 'PROCESSING'
     THEN
       process_status_from_v:='RAW';
+      is_null_v:=' or dv_process_status is null';
     WHEN 'DONE'
     THEN
       process_status_from_v:='PROCESSING';
@@ -20,11 +23,10 @@ BEGIN
     NULL;
   END CASE;
 
-  sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=' || process_status_to_v ||
-         ' where dv_process_status=' || process_status_from_v || ';';
+  sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=''' || process_status_to_v ||
+         ''' where dv_process_status=''' || process_status_from_v || '''' || is_null_v || ';';
 
   RETURN sql_v;
 
 END
-$BODY$
-LANGUAGE plpgsql;
+$$

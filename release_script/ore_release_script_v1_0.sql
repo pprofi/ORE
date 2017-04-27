@@ -319,7 +319,6 @@ CREATE TABLE dv_stage_table_column
   column_precision        INTEGER,
   column_scale            INTEGER,
   collation_name          VARCHAR(128),
-  source_ordinal_position INTEGER                                                                          NOT NULL,
   is_source_date          BOOLEAN DEFAULT FALSE                                                            NOT NULL,
   discard_flag            BOOLEAN DEFAULT FALSE                                                            NOT NULL,
   is_retired              BOOLEAN DEFAULT FALSE                                                            NOT NULL,
@@ -1519,7 +1518,7 @@ CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
   hub_name_in           VARCHAR(128)
 )
   RETURNS TEXT AS
-$BODY$
+$body$
 DECLARE
   sql_block_start_v    TEXT:='';
   sql_block_end_v      TEXT:='';
@@ -1544,23 +1543,7 @@ BEGIN
   END IF;
 
 
-  -- code snippets
- /* sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
-  sql_block_end_v:=newline_v || 'end$$;';
-
-  -- update processing status stage
-  sql_process_start_v:=
-  'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' || quote_literal('PROCESSING') ||
-  ' where status=' ||
-  quote_literal('RAW')||';'||newline_v;
-  sql_process_finish_v:=
-  newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
-  quote_literal('PROCESSED') || ' where status=' ||
-  quote_literal('PROCESSING')||';'||newline_v;
-
-*/
-
-  -- dynamic upsert statement
+    -- dynamic upsert statement
   -- add process status select-update in transaction
   WITH sql AS (
     SELECT
@@ -1616,8 +1599,8 @@ BEGIN
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
 
 END
-$BODY$
-LANGUAGE plpgsql;
+$body$;
+
 
 
 DO $$
@@ -1626,21 +1609,15 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION dv_config_dv_load_satellite(
-  stage_table_schema_in VARCHAR(128),
-  stage_table_name_in   VARCHAR(128),
-  satellite_schema_in   VARCHAR(128),
-  satellite_name_in     VARCHAR(128),
-  load_type_in          VARCHAR(10) DEFAULT 'delta'
-)
-  RETURNS TEXT AS
-$BODY$
+CREATE or replace FUNCTION dv_config_dv_load_satellite (stage_table_schema_in character varying, stage_table_name_in character varying, satellite_schema_in character varying, satellite_name_in character varying, load_type_in character varying DEFAULT 'delta'::character varying) RETURNS text
+	LANGUAGE plpgsql
+AS $fun$
 DECLARE
-  sql_block_start_v    TEXT:='';
-  sql_block_end_v      TEXT:='';
+  sql_block_start_v    TEXT :='';
+  sql_block_end_v      TEXT :='';
   sql_block_body_v     TEXT;
-  sql_process_start_v  TEXT:='';
-  sql_process_finish_v TEXT:='';
+  sql_process_start_v  TEXT :='';
+  sql_process_finish_v TEXT :='';
   delimiter_v          CHAR(2) :=',';
   newline_v            CHAR(3) :=E'\n';
   load_time_v          TIMESTAMPTZ;
@@ -1665,32 +1642,13 @@ BEGIN
   -- get satellite name
   satellite_name_v:=fn_get_object_name(satellite_name_in, 'satellite');
 
-  IF COALESCE(satellite_name_v, '') = '' or COALESCE(hub_name_v, '')=''
+  IF COALESCE(satellite_name_v, '') = '' OR COALESCE(hub_name_v, '') = ''
   THEN
     RAISE NOTICE 'Not valid satellite name --> %', satellite_name_in;
     RETURN NULL;
   END IF;
 
-  -- code snippets
-  -- block
-/*  sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
-  sql_block_end_v:=newline_v || 'end$$;';
 
-  -- update status of records in stage table
-  sql_process_start_v:=
-  'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' || quote_literal('PROCESSING') ||
-  ' where status=' ||
-  quote_literal('RAW') || ';' || newline_v;
-  sql_process_finish_v:=
-  newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
-  quote_literal('PROCESSED') || ' where status=' ||
-  quote_literal('PROCESSING') || ';' || newline_v;
-*/
-  -- dynamic upsert statement
-  -- full load means that records for whose keys in staging not found will be marked as deleted
-  -- lookup keys in hub
-  -- insert records for new keys
-  -- update changed records for existing keys, insert new record with changed values
 
   WITH sql AS (
   -- list of stage table- satellite match and hub key lookup column
@@ -1858,30 +1816,31 @@ INTO sql_block_body_v;
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
 
 END
-$BODY$
-LANGUAGE plpgsql;
-
+$fun$
 
 /*************************function dealing with source and stage processing statuses**********************************/
 
  RAISE NOTICE 'Configuring helper functions...';
 
 
-CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in VARCHAR, table_name_in VARCHAR,
-                                                        operation_in    VARCHAR)
-  RETURNS TEXT AS
-$BODY$
+CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in CHARACTER VARYING,
+                                                        table_name_in   CHARACTER VARYING,
+                                                        operation_in    CHARACTER VARYING)
+  RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
 DECLARE
   process_status_to_v   VARCHAR(30) :=operation_in;
-  process_status_from_v VARCHAR(30);
+  process_status_from_v VARCHAR(100);
   sql_v                 TEXT;
+  is_null_v             VARCHAR(100) :='';
 BEGIN
 
-  -- update processing status
   CASE operation_in
     WHEN 'PROCESSING'
     THEN
       process_status_from_v:='RAW';
+      is_null_v:=' or dv_process_status is null';
     WHEN 'DONE'
     THEN
       process_status_from_v:='PROCESSING';
@@ -1889,29 +1848,1057 @@ BEGIN
     NULL;
   END CASE;
 
-  sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=' || process_status_to_v ||
-         ' where dv_process_status=' || process_status_from_v || ';';
+  sql_v:='update ' || table_schema_in || '.' || table_name_in || ' set dv_process_status=''' || process_status_to_v ||
+         ''' where dv_process_status=''' || process_status_from_v || '''' || is_null_v || ';';
 
   RETURN sql_v;
+
+END
+$$
+
+
+
+CREATE FUNCTION fn_source_cleanup (table_schema_in character varying, table_name_in character varying) RETURNS text
+	LANGUAGE plpgsql
+AS $$
+DECLARE
+  sql_v            TEXT;
+  process_status_v VARCHAR :='DONE';
+BEGIN
+
+  sql_v:='delete from ' || table_schema_in || '.' || table_name_in || ' where  dv_process_status=''' || process_status_v
+         || ''';';
+
+  RETURN sql_v;
+
+END
+$$
+
+
+
+/************************* logger **********************************************************************/
+ RAISE NOTICE 'Configuring logging module...';
+
+
+CREATE SEQUENCE dv_log_id_seq START 1;
+
+CREATE TABLE dv_log
+(
+    id INTEGER DEFAULT nextval('dv_log_id_seq'::regclass) PRIMARY KEY NOT NULL,
+    log_datetime TIMESTAMP,
+    log_proc TEXT,
+    message TEXT
+);
+
+
+CREATE OR REPLACE FUNCTION dv_log_proc(proc_name_in TEXT, message_in TEXT)
+  RETURNS VOID AS
+$BODY$
+BEGIN
+
+  INSERT INTO dv_log (log_datetime, log_proc, message)
+  VALUES (now(), proc_name_in, message_in);
+
+  RETURN;
+END
+$BODY$
+LANGUAGE plpgsql;
+
+/************************* scheduler **********************************************************************/
+
+ RAISE NOTICE 'Configuring schedule module...';
+
+CREATE SEQUENCE dv_schedule_seq START 1;
+
+CREATE TABLE dv_schedule
+(
+  schedule_key         INTEGER                  DEFAULT nextval(
+      'dv_schedule_seq' :: REGCLASS) PRIMARY KEY                                                           NOT NULL,
+  schedule_name        VARCHAR(128)                                                                        NOT NULL,
+  schedule_description VARCHAR(500),
+  schedule_frequency   INTERVAL,
+  start_date           TIMESTAMP                DEFAULT now(),
+  last_start_date      TIMESTAMP,
+  is_cancelled         BOOLEAN DEFAULT FALSE                                                               NOT NULL,
+  release_key          INTEGER DEFAULT 1                                                                   NOT NULL,
+  owner_key            INTEGER DEFAULT 1                                                                   NOT NULL,
+  version_number       INTEGER DEFAULT 1                                                                   NOT NULL,
+  updated_by           VARCHAR(50) DEFAULT "current_user"()                                                NOT NULL,
+  updated_datetime     TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  CONSTRAINT fk_dv_schedule_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_schedule_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
+);
+
+CREATE UNIQUE INDEX dv_schedule_unq
+  ON dv_schedule (owner_key, schedule_name);
+
+-- audit
+CREATE TRIGGER dv_schedule_audit
+AFTER UPDATE ON dv_schedule
+FOR EACH ROW
+WHEN (OLD.* IS DISTINCT FROM NEW.*)
+EXECUTE PROCEDURE dv_config_audit();
+
+
+CREATE SEQUENCE dv_schedule_task_seq START 1;
+CREATE TABLE dv_schedule_task
+(
+  schedule_task_key INTEGER                  DEFAULT nextval(
+      'dv_schedule_task_seq' :: REGCLASS) PRIMARY KEY                                                        NOT NULL,
+  schedule_key      INTEGER                                                                                  NOT NULL,
+  object_key        INTEGER                                                                                  NOT NULL,
+  object_type       VARCHAR(50)                                                                              NOT NULL,
+  load_type         VARCHAR(30)                                                                              NOT NULL,
+  is_cancelled      BOOLEAN DEFAULT FALSE                                                                    NOT NULL,
+  release_key       INTEGER DEFAULT 1                                                                        NOT NULL,
+  owner_key         INTEGER DEFAULT 1                                                                        NOT NULL,
+  version_number    INTEGER DEFAULT 1                                                                        NOT NULL,
+  updated_by        VARCHAR(50) DEFAULT "current_user"()                                                     NOT NULL,
+  updated_datetime  TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  CONSTRAINT fk_dv_schedule_task_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_schedule_task_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
+  CONSTRAINT fk_dv_schedule_task_dv_schedule FOREIGN KEY (schedule_key) REFERENCES dv_schedule (schedule_key)
+
+);
+CREATE UNIQUE INDEX dv_schedule_task_unq
+  ON dv_schedule_task (owner_key, schedule_key, object_key, object_type, load_type);
+
+-- audit
+CREATE TRIGGER dv_schedule_task_audit
+AFTER UPDATE ON dv_schedule_task
+FOR EACH ROW
+WHEN (OLD.* IS DISTINCT FROM NEW.*)
+EXECUTE PROCEDURE dv_config_audit();
+
+CREATE SEQUENCE dv_schedule_task_hierarchy_seq START 1;
+CREATE TABLE dv_schedule_task_hierarchy
+(
+  schedule_task_hierarchy_key INTEGER                  DEFAULT nextval(
+      'dv_schedule_task_hierarchy_seq' :: REGCLASS) PRIMARY KEY    NOT NULL,
+  schedule_task_key           INTEGER                              NOT NULL,
+  schedule_parent_task_key    INTEGER,
+  is_cancelled                BOOLEAN DEFAULT FALSE                NOT NULL,
+  release_key                 INTEGER DEFAULT 1                    NOT NULL,
+  owner_key                   INTEGER DEFAULT 1                    NOT NULL,
+  version_number              INTEGER DEFAULT 1                    NOT NULL,
+  updated_by                  VARCHAR(50) DEFAULT "current_user"() NOT NULL,
+  updated_datetime            TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  CONSTRAINT fk_dv_schedule_task_hierarchy_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
+  CONSTRAINT fk_dv_schedule_task_hierarchy_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key),
+  CONSTRAINT fk_dv_schedule_task_hierarchy_dv_schedule_task FOREIGN KEY (schedule_task_key) REFERENCES dv_schedule_task (schedule_task_key)
+);
+
+CREATE UNIQUE INDEX dv_schedule_task_hierarchy_unq
+  ON dv_schedule_task_hierarchy (owner_key, schedule_task_key, schedule_parent_task_key);
+
+CREATE OR REPLACE FUNCTION ore_config.dv_run_next_schedule_task(job_id_in          INTEGER, schedule_key_in INTEGER,
+                                                                parent_task_key_in INTEGER)
+  RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  exec_script_v    TEXT;
+  sql_v            TEXT;
+  task_key_v       INT;
+  job_id_v         INT :=job_id_in;
+  schedule_key_v   INT :=schedule_key_in;
+  status_v         VARCHAR :='done';
+  exec_type_v      VARCHAR(30);
+  exec_script_l2_v TEXT;
+  state_v          VARCHAR;
+  proc_v           VARCHAR(50) :='dv_run_next_schedule_task';
+BEGIN
+
+  -- identify first task to run
+
+  SELECT
+    coalesce(min(schedule_task_key), -1),
+    min(script),
+    min(exec_type)
+  INTO task_key_v, exec_script_v, exec_type_v
+  FROM dv_schedule_task_queue
+  WHERE job_id = job_id_in AND parent_task_key = parent_task_key_in AND schedule_key = schedule_key_in;
+
+  SELECT dv_log_proc(proc_v, 'Task to run-->' || task_key_v)
+  INTO state_v;
+
+  IF task_key_v <> -1
+  THEN
+
+    BEGIN
+
+      -- set status to processing
+      status_v:='processing';
+
+      -- update task status
+      UPDATE dv_schedule_task_queue
+      SET process_status = status_v, update_datetime = now()
+      WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
+
+      SELECT dv_log_proc(proc_v,
+                         'Executing task-->' || task_key_v || '; type-->' || exec_type_v || '; task script-->' ||
+                         exec_script_v)
+      INTO state_v;
+
+      -- run statement
+      EXECUTE exec_script_v
+      INTO exec_script_l2_v;
+
+      -- for any other type than business_rule_proc run second time as first run only generates code to run in that case
+      IF exec_type_v <> 'business_rule_proc'
+      THEN
+
+        SELECT dv_log_proc(proc_v, 'Executing script-->' || exec_script_l2_v)
+        INTO state_v;
+
+        EXECUTE exec_script_l2_v;
+
+      END IF;
+
+      -- set status to DONE if executed successfully
+      status_v:='done';
+
+      EXCEPTION WHEN OTHERS
+      THEN
+        -- in case of failure
+        status_v:='failed';
+    END;
+  ELSE
+    -- if no child tasks check if there are another jobs for this schedule queued minimum of jobs_id
+    SELECT
+      coalesce(min(schedule_task_key), -1),
+      coalesce(min(job_id), -1)
+    INTO task_key_v, job_id_v
+    FROM (
+           SELECT
+             schedule_task_key,
+             job_id,
+             ROW_NUMBER()
+             OVER (
+               ORDER BY job_id ASC) AS rn
+           FROM dv_schedule_task_queue
+           WHERE parent_task_key IS NULL AND process_status = 'queued'
+                 AND schedule_key = schedule_key_in AND job_id <> job_id_in AND parent_task_key IS NULL) t
+    WHERE rn = 1;
+
+  END IF;
+
+   -- update status of the task to done or failed depending on execution
+  UPDATE dv_schedule_task_queue
+  SET process_status = status_v, update_datetime = now()
+  WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
+
+  -- no tasks to run for job_id
+  -- clean up and dump all executed tasks into history
+  IF task_key_v = -1 OR job_id_v = -1
+  THEN
+
+    WITH del AS
+    (
+      DELETE FROM dv_schedule_task_queue
+      WHERE process_status = 'done' AND schedule_key = schedule_key_in AND job_id = job_id_in
+      RETURNING *
+    )
+    INSERT INTO dv_schedule_task_queue_history (job_id,
+                                                schedule_key,
+                                                schedule_task_key,
+                                                parent_task_key,
+                                                task_level,
+                                                process_status,
+                                                script,
+                                                exec_type,
+                                                start_datetime,
+                                                owner_key, insert_datetime)
+      SELECT
+        job_id,
+        schedule_key,
+        schedule_task_key,
+        parent_task_key,
+        task_level,
+        process_status,
+        script,
+        exec_type,
+        start_datetime,
+        owner_key,
+        now()
+      FROM del;
+  END IF;
+
+  SELECT dv_log_proc(proc_v, 'Finished execution ....')
+  INTO state_v;
+
+  RETURN 1;
+END
+$$
+
+
+
+CREATE OR REPLACE FUNCTION dv_init_schedule_task_run()
+  RETURNS TRIGGER
+AS $body$
+DECLARE
+  result_v INT;
+  proc_v   VARCHAR(50) :='dv_init_schedule_task_run';
+  state_v  VARCHAR;
+BEGIN
+
+
+  IF new.process_status = 'done'
+  THEN
+
+    SELECT dv_log_proc(proc_v, 'Schedule-->' || new.schedule_key || '; job_id-->' || new.job_id || ';task_key-->' ||
+                               new.schedule_task_key)
+    INTO state_v;
+
+    -- run next task
+    SELECT dv_run_next_schedule_task(new.job_id, new.schedule_key, new.schedule_task_key)
+    INTO result_v;
+
+  END IF;
+  RETURN NULL;
+END
+$body$
+LANGUAGE plpgsql;
+
+
+CREATE SEQUENCE dv_job_id_seq START 1;
+
+CREATE TABLE dv_schedule_task_queue
+(
+  job_id            INT,
+  schedule_key      INT,
+  schedule_task_key INT,
+  parent_task_key   INT,
+  task_level        INT,
+  process_status    VARCHAR(50),
+  script            TEXT,
+  exec_type varchar(30),
+  start_datetime    TIMESTAMP,
+  update_datetime   TIMESTAMP,
+  owner_key         INT
+);
+
+CREATE TRIGGER dv_schedule_task_queue_tgu
+AFTER UPDATE ON ore_config.dv_schedule_task_queue
+FOR EACH ROW EXECUTE PROCEDURE ore_config.dv_init_schedule_task_run();
+
+
+CREATE TABLE dv_schedule_task_queue_history
+(
+  job_id            INT,
+  schedule_key      INT,
+  schedule_task_key INT,
+  parent_task_key   INT,
+  task_level        INT,
+  process_status    VARCHAR(50),
+  script            TEXT,
+  exec_type varchar(30),
+  start_datetime    TIMESTAMP,
+  update_datetime   TIMESTAMP,
+  owner_key         INT,
+  insert_datetime   TIMESTAMP
+);
+
+
+
+CREATE FUNCTION fn_get_dv_object_load_script (object_key_in integer, object_type_in character varying, load_type_in character varying, owner_key_in integer) RETURNS text
+	LANGUAGE plpgsql
+AS $$
+DECLARE
+  sql_v TEXT;
+BEGIN
+
+  CASE
+    WHEN object_type_in in ('business_rule' , 'business_rule_proc')
+    THEN
+      -- 1. business_rule/ stage table
+      -- if it is stored procedure then different
+      SELECT business_rule_logic
+      INTO sql_v
+      FROM dv_business_rule
+      WHERE business_rule_key = object_key_in
+            AND is_retired = false
+            AND owner_key = owner_key_in;
+
+    WHEN object_type_in='hub'
+    THEN
+      -- 2. hub
+      SELECT DISTINCT
+        'select ore_config.dv_config_dv_load_hub(''' || st.stage_table_schema || ''',''' || st.stage_table_name || ''',''' ||
+        h.hub_schema || ''',''' ||
+        h.hub_name || ''');'
+      INTO sql_v
+      FROM dv_hub h
+        JOIN dv_hub_key_column hk ON h.hub_key = hk.hub_key
+        JOIN dv_hub_column hc ON hc.hub_key_column_key = hk.hub_key_column_key
+        JOIN dv_stage_table_column sc ON sc.column_key = hc.column_key
+        JOIN dv_stage_table st ON st.stage_table_key = sc.stage_table_key
+      WHERE h.owner_key = owner_key_in AND h.is_retired = false AND st.is_retired = false AND sc.is_retired = false
+            AND st.stage_table_key = object_key_in;
+    WHEN object_type_in='satellite'
+    THEN
+      -- 3. satellite
+      SELECT DISTINCT
+        'select ore_config.dv_config_dv_load_satellite(''' || st.stage_table_schema || ''',''' || st.stage_table_name || ''',''' ||
+        s.satellite_schema || ''',''' || s.satellite_name || ''',''' || load_type_in || ''');'
+      INTO sql_v
+      FROM dv_satellite s
+        JOIN dv_satellite_column sc ON sc.satellite_key = s.satellite_key
+        JOIN dv_stage_table_column stc ON stc.column_key = sc.column_key
+        JOIN dv_stage_table st ON stc.stage_table_key = st.stage_table_key
+      WHERE s.is_retired = false AND st.is_retired = false AND stc.is_retired = false
+            AND s.owner_key = owner_key_in
+            AND st.stage_table_key = object_key_in;
+  ELSE
+    -- 4. source or anything else -  nothing
+    sql_v:='';
+  END CASE;
+
+
+  RETURN sql_v;
+
+END
+$$;
+
+
+-- list of valid schedule tasks & execution sctipts
+CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
+  SELECT
+    t.schedule_key,
+    t.schedule_name,
+    t.owner_key,
+    t.schedule_frequency,
+    t.schedule_task_key,
+    t.parent_task_key,
+    t.depth                                                                             AS task_level,
+    t.object_key,
+    t.object_type,
+    t.load_type,
+    ore_config.fn_get_dv_object_load_script(t.object_key, t.object_type, t.load_type, t.owner_key) AS load_script
+  FROM
+    (
+      SELECT
+        s.schedule_key,
+        s.owner_key,
+        s.schedule_name,
+        s.schedule_frequency,
+        s.start_date,
+        st.schedule_task_key,
+        sth.parent_task_key,
+        sth.depth,
+        st.object_key,
+        st.object_type,
+        st.load_type
+      FROM dv_schedule s
+        JOIN dv_schedule_task st ON s.schedule_key = st.schedule_key
+        JOIN
+        (
+          WITH RECURSIVE node_rec AS
+          (
+            SELECT
+              1                        AS depth,
+              schedule_task_key        AS task_key,
+              schedule_parent_task_key AS parent_task_key
+            FROM dv_schedule_task_hierarchy
+            WHERE schedule_parent_task_key IS NULL AND is_cancelled = FALSE
+            UNION ALL
+            SELECT
+              depth + 1,
+              n.schedule_task_key        AS task_key,
+              n.schedule_parent_task_key AS parent_task_key
+            FROM dv_schedule_task_hierarchy AS n
+              JOIN node_rec r ON n.schedule_parent_task_key = r.task_key
+            WHERE n.is_cancelled = FALSE
+          )
+          SELECT
+            depth,
+            task_key,
+            parent_task_key
+          FROM node_rec
+        )
+        sth ON sth.task_key = st.schedule_task_key
+      WHERE s.is_cancelled = FALSE AND st.is_cancelled = FALSE
+    ) t;
+
+
+CREATE FUNCTION dv_load_source_status_update (owner_name_in character varying, system_name_in character varying, table_schema_in character varying, table_name_in character varying) RETURNS void
+	LANGUAGE plpgsql
+AS $$
+DECLARE
+  owner_key_v          INTEGER;
+  start_time_v         TIMESTAMP;
+  process_status_v     VARCHAR(20) :='queued';
+  schedule_key_v       INT;
+  state_v              VARCHAR;
+  proc_v               VARCHAR(50) :='dv_load_source_status_update';
+  job_id_v             INT;
+BEGIN
+
+  SET SEARCH_PATH TO ore_config;
+
+  -- generate job_id
+  SELECT nextval('dv_job_id_seq' :: REGCLASS)
+  INTO job_id_v;
+
+  SELECT dv_log_proc(proc_v, 'Starting execution of job_id-->' ||job_id_v )
+    INTO state_v;
+
+  start_time_v:=now();
+
+  -- find owner key
+  SELECT owner_key
+  INTO owner_key_v
+  FROM dv_owner
+  WHERE owner_name = owner_name_in;
+
+  -- find related schedule tasks for source
+  -- select tasks for execution
+  -- queued process state
+  WITH src AS (
+      SELECT
+        S.schedule_task_key AS task_key,
+        s.schedule_key
+      FROM dv_schedule_task S
+        JOIN dv_source_table st ON S.object_key = st.source_table_key
+        JOIN dv_source_system ss ON st.system_key = ss.source_system_key
+      WHERE S.object_type = 'source' AND S.owner_key = owner_key_v
+            AND ss.source_system_name = system_name_in
+            AND st.source_table_schema = table_schema_in
+            AND st.source_table_name = table_name_in)
+  INSERT INTO dv_schedule_task_queue (job_id,
+                                      schedule_key,
+                                      schedule_task_key,
+                                      parent_task_key,
+                                      task_level,
+                                      process_status,
+                                      script,
+                                      exec_type,
+                                      start_datetime,
+                                      owner_key)
+    SELECT
+      job_id_v,
+      v.schedule_key,
+      v.schedule_task_key,
+      v.parent_task_key,
+      v.task_level,
+      process_status_v,
+      v.load_script AS script,
+      v.object_type,
+      start_time_v,
+      v.owner_key
+    FROM dv_schedule_valid_tasks v
+      JOIN src ON v.schedule_key = src.schedule_key;
+
+  -- updates first task to trigger next job_id for the same schedule
+  -- need to check if there is another job for this schedule is running and update status appropriately
+  UPDATE dv_schedule_task_queue q
+  SET process_status = 'done', update_datetime = now()
+  WHERE q.job_id = job_id_v
+        AND q.parent_task_key IS NULL
+        AND NOT exists(SELECT 1
+                       FROM dv_schedule_task_queue d
+                       WHERE d.schedule_key = q.schedule_key AND d.job_id <> job_id_v AND
+                             d.process_status IN ('queued', 'processing')
+                             AND d.start_datetime < q.start_datetime
+  );
+
+SELECT dv_log_proc(proc_v, 'Finished execution of job_id-->' ||job_id_v )
+    INTO state_v;
+
+END
+$$
+
+
+
+
+
+/************************* modeller package**********************************************************************/
+ RAISE NOTICE 'Configuring modeller...';
+
+CREATE TABLE dv_model_L1_design
+(
+  object_type         VARCHAR,
+  object_schema       VARCHAR,
+  object_name         VARCHAR,
+  object_relationship VARCHAR,
+  is_parent           INT
+);
+
+CREATE TABLE dv_model_L2_contents
+(
+  object_type      VARCHAR,
+  object_name      VARCHAR,
+  object_schema    VARCHAR,
+  column_name      VARCHAR,
+  column_type      VARCHAR,
+  column_length    INT,
+  column_precision INT,
+  column_scale     INT
+);
+
+CREATE TABLE dv_model_L3_mapping
+(
+  mapping_type      VARCHAR,
+  object_name_in    VARCHAR,
+  object_schema_in  VARCHAR,
+  column_name_in    VARCHAR,
+  object_name_out   VARCHAR,
+  object_schema_out VARCHAR,
+  column_name_out   VARCHAR
+);
+
+CREATE TABLE dv_model_L4_logic
+(
+  schedule_name           VARCHAR,
+  object_type             VARCHAR,
+  source_name             VARCHAR,
+  source_schema           VARCHAR,
+  source_load_type        VARCHAR,
+  business_rule_name      VARCHAR,
+  business_rule_logic     TEXT,
+  business_rule_load_type VARCHAR,
+  business_rule_type      VARCHAR,
+  rn_order                INT
+);
+
+
+-- model - design
+CREATE OR REPLACE FUNCTION dv_model_l1_load_design(owner_name_in     VARCHAR, owner_desc_in VARCHAR,
+                                                   release_number_in INT,
+                                                   release_desc_in   VARCHAR)
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  release_key_v INT;
+  owner_key_v   INT;
+  object_v      VARCHAR [] [];
+  r             RECORD;
+  rd            RECORD;
+  object_key_v  INT;
+BEGIN
+  -- check if owner exists
+  SELECT owner_key
+  INTO owner_key_v
+  FROM dv_owner ow
+  WHERE owner_name = owner_name_in;
+
+  -- new owner
+  IF owner_key_v IS NULL
+  THEN
+    -- add owner
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [2, 2]);
+    object_v [1] [1]:='owner_name';
+    object_v [1] [2]:=owner_name_in;
+    object_v [2] [1]:='owner_description';
+    object_v [2] [2]:=owner_desc_in;
+
+    SELECT dv_config_object_insert('dv_owner',
+                                   object_v);
+  END IF;
+
+  -- release
+  SELECT release_key
+  INTO release_key_v
+  FROM dv_release
+  WHERE release_number = release_number_in;
+
+  -- new release
+  IF release_key_v IS NULL
+  THEN
+    -- add release
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [3, 2]);
+    object_v [1] [1]:='release_number';
+    object_v [1] [2]:=release_number_in;
+    object_v [2] [1]:='release_description';
+    object_v [2] [2]:=release_desc_in;
+    object_v [3] [1]:='owner_key';
+    object_v [3] [2]:= owner_key_v;
+    SELECT dv_config_object_insert('dv_release',
+                                   object_v);
+  END IF;
+
+  -- go through the rest and add DV objects into config
+  -- source_systems
+  object_v:=array_fill(NULL :: VARCHAR, ARRAY [5, 2]);
+  object_v [1] [1]:='release_number';
+  object_v [1] [2]:=release_number_in;
+  object_v [2] [1]:='owner_key';
+  object_v [2] [2]:= owner_key_v;
+
+  FOR r IN (SELECT *
+            FROM dv_model_L1_design
+            WHERE object_type IN ('source_system', 'hub')) LOOP
+
+    object_v [3] [1]:=r.object_type || '_schema';
+    object_v [3] [2]:=r.object_schema;
+    object_v [4] [1]:=r.object_type || '_name';
+    object_v [4] [2]:=r.object_name;
+
+    SELECT dv_config_object_insert('dv_' || r.object_type,
+                                   object_v);
+
+    EXECUTE 'select ' || r.object_type || '_key from dv_' || r.object_type || ' where ' || r.object_type || '_schema='''
+            || r.object_schema || ''' and ' || r.object_type || '_name=''' || r.object_name || ''''
+    INTO object_key_v;
+
+    -- looping through dependamt objects
+    FOR rd IN (SELECT *
+               FROM dv_model_L1_design
+               WHERE rd.is_parent IS NULL AND r.object_relationship = rd.object_relationship)
+    LOOP
+      object_v [3] [1]:=r.object_type || '_schema';
+      object_v [3] [2]:=r.object_schema;
+      object_v [4] [1]:=r.object_type || '_name';
+      object_v [4] [2]:=r.object_name;
+
+      object_v [5] [1]:= (CASE WHEN r.object_type = 'source_system'
+        THEN 'system'
+                          ELSE r.object_type END) || '_key';
+      object_v [5] [2]:=object_key_v;
+
+      -- add object to config
+      SELECT dv_config_object_insert('dv_' || r.object_type,
+                                     object_v);
+
+    END LOOP;
+
+  END LOOP;
+
 
 END
 $BODY$
 LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION fn_dv_source_cleanup(table_schema_in VARCHAR, table_name_in VARCHAR)
-  RETURNS TEXT AS
--- removes processed data from stage and source tables
+--  model contents
+CREATE OR REPLACE FUNCTION dv_model_l2_load_contents(release_number_in INT)
+  RETURNS VOID AS
 $BODY$
 DECLARE
-  sql_v            TEXT;
-  process_status_v VARCHAR :='DONE';
+  r            RECORD;
+  owner_key_v  INT;
+  object_key_v INT;
+  object_v     VARCHAR [] [];
+  suffix_v     VARCHAR;
+BEGIN
+  -- loop through all columns
+  FOR r IN (SELECT *
+            FROM dv_model_L2_contents) LOOP
+
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [8, 2]);
+    -- get keys of parent objects
+    EXECUTE 'select owner_key, ' || r.object_type || '_key from dv_' || r.object_type || ' where ' ||
+            r.object_type || '_schema=''' ||
+            r.object_schema || ''' and ' || r.object_type || '_name=''' || r.object_name || ''''
+    INTO owner_key_v, object_key_v;
+
+
+    suffix_v :=CASE WHEN r.object_type = 'hub'
+      THEN 'hub_key_'
+               ELSE '' END;
+
+    object_v [1] [1]:='release_number';
+    object_v [1] [2]:=release_number_in;
+    object_v [2] [1]:='owner_key';
+    object_v [2] [2]:= owner_key_v;
+    object_v [3] [1]:=r.object_type || '_key';
+    object_v [3] [1]:=object_key_v;
+
+    object_v [4] [1]:= suffix_v || 'column_name';
+    object_v [4] [2]:= r.column_name;
+    object_v [5] [1]:=suffix_v || 'column_type';
+    object_v [5] [2]:= r.column_type;
+    object_v [6] [1]:=suffix_v || 'column_length';
+    object_v [6] [2]:= r.column_length;
+    object_v [7] [1]:=suffix_v || 'column_precision';
+    object_v [7] [2]:= r.column_precision;
+    object_v [8] [1]:=suffix_v || 'column_scale';
+    object_v [8] [2]:= r.column_scale;
+
+    -- add object into config
+    SELECT dv_config_object_insert('dv_' || CASE WHEN r.object_type = 'hub'
+      THEN suffix_v
+                                            ELSE r.object_type || '_' END || 'column',
+                                   object_v);
+
+
+  END LOOP;
+END
+$BODY$
+LANGUAGE plpgsql;
+
+-- model mappings
+CREATE OR REPLACE FUNCTION dv_model_l3_load_mappings(release_number_in INT)
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  r            RECORD;
+  owner_key_v  INT;
+  object_key_v INT;
+  object_v     VARCHAR [] [];
+  column_key_v INT;
 BEGIN
 
-  sql_v:='delete from ' || table_schema_in || '.' || table_name_in || ' where  dv_process_status=' || process_status_v
-         || ';';
+  -- loop through columns to map
+  FOR r IN (SELECT *
+            FROM dv_model_L3_mapping) LOOP
 
-  RETURN sql_v;
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [4, 2]);
+
+    -- stage table column key
+    SELECT
+      column_key,
+      c.owner_key
+    INTO column_key_v, owner_key_v
+    FROM dv_stage_table st
+      JOIN dv_stage_table_column c ON st.stage_table_key = c.stage_table_key
+    WHERE stage_table_schema = r.object_schema_out AND st.stage_table_name = r.object_name_out AND
+          c.column_name = r.coulumn_name_out;
+
+    -- find mapping object key
+    IF r.mapping_type = 'hub'
+    THEN
+
+      SELECT hub_key_column_key
+      INTO object_key_v
+      FROM dv_hub_key_column hkc
+        JOIN dv_hub h ON h.hub_key = hkc.hub_key
+      WHERE h.hub_name = r.object_name_in AND h.hub_schema = r.object_schema_in
+            AND hkc.hub_key_column_name = r.column_name_in;
+
+    ELSE
+      -- mapping for satellites
+      SELECT satellite_key
+      INTO object_key_v
+      FROM dv_satellite
+      WHERE satellite_name = r.object_name_in AND satellite_schema = r.object_schema_in;
+    END IF;
+
+    object_v [1] [1]:='release_number';
+    object_v [1] [2]:=release_number_in;
+    object_v [2] [1]:='owner_key';
+    object_v [2] [2]:= owner_key_v;
+    object_v [3] [1]:= CASE WHEN r.mapping_type = 'hub'
+      THEN 'hub_key_column_key'
+                       ELSE 'satellite_key' END;
+    object_v [3] [1]:=object_key_v;
+    object_v [4] [1]:='column_key';
+    object_v [4] [2]:= column_key_v;
+
+    -- add data to config
+    SELECT dv_config_object_insert('dv_' || r.object_type || '_column',
+                                   object_v);
+
+  END LOOP;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+-- loading tasks and business rules
+CREATE OR REPLACE FUNCTION dv_model_l4_load_logic(release_number_in INT)
+  RETURNS VOID AS
+$BODY$
+DECLARE
+  r                 RECORD;
+  rh                RECORD;
+  owner_key_v       INT;
+  object_key_v      INT;
+  object_v          VARCHAR [] [];
+  object2_key_v     INT;
+  object3_key_v     INT;
+  task_key_v        INT;
+  parent_task_key_v INT;
+BEGIN
+
+  -- check if release exists
+  -- find owner_key
+
+  SELECT owner_key
+  INTO owner_key_v
+  FROM dv_release
+  WHERE release_number = release_number_in;
+
+  IF owner_key_v IS NULL
+  THEN
+    RETURN;
+  END IF;
+
+  FOR r IN (SELECT DISTINCT schedule_name AS schedule_name
+            FROM dv_model_L4_logic) LOOP
+
+    parent_task_key_v:=NULL;
+    -- add schedule - 1 schedule per one - source
+    -- add schedule tasks related to source load
+    -- add business rules related to tasks
+    -- add hierarchy of tasks
+    object_v:=array_fill(NULL :: VARCHAR, ARRAY [4, 2]);
+
+    object_v [1] [1]:='release_number';
+    object_v [1] [2]:=release_number_in;
+    object_v [2] [1]:='owner_key';
+    object_v [2] [2]:= owner_key_v;
+    object_v [3] [1]:= 'schedule_name';
+    object_v [3] [2]:= r.schedule_name;
+    object_v [4] [1]:= 'schedule_description';
+    object_v [4] [2]:= r.schedule_name;
+
+    SELECT dv_config_object_insert('dv_schedule',
+                                   object_v);
+
+    -- find just inserted object_key
+    SELECT schedule_key
+    INTO object_key_v
+    FROM dv_schedule
+    WHERE schedule_name = r.schedule_name AND owner_key = owner_key_v;
+
+    -- loop through related tasks and business rules
+    FOR rh IN (SELECT *
+               FROM dv_model_L4_logic
+               WHERE schedule_name = r.schedule_name
+               ORDER BY rn_order ASC
+    ) LOOP
+
+      object2_key_v:=NULL;
+      object3_key_v:=NULL;
+
+      -- load source task - find table key
+
+      IF rh.object_type = 'source'
+      THEN
+
+        SELECT source_table_key
+        INTO object2_key_v
+        FROM dv_source_table
+        WHERE source_table_name = rh.source_name
+              AND source_table_schema = rh.source_schema
+              AND owner_key = owner_key_v;
+
+      ELSE
+        -- find stage table key for other tasks
+        SELECT stage_table_key
+        INTO object2_key_v
+        FROM dv_stage_table
+        WHERE stage_table_name = rh.source_name
+              AND stage_table_schema = rh.source_schema
+              AND owner_key = owner_key_v;
+      END IF;
+
+      -- configure and add business rules
+      IF rh.business_rule_name IS NOT NULL
+      THEN
+
+        object_v:=array_fill(NULL :: VARCHAR, ARRAY [7, 2]);
+
+        object_v [1] [1]:='release_number';
+        object_v [1] [2]:=release_number_in;
+        object_v [2] [1]:='owner_key';
+        object_v [2] [2]:= owner_key_v;
+
+        object_v [3] [1]:= 'business_rule_name';
+        object_v [3] [2]:= rh.business_rule_name;
+
+        object_v [4] [1]:= 'business_rule_logic';
+        object_v [4] [2]:= rh.business_rule_logic;
+
+        object_v [5] [1]:= 'stage_table_key';
+        object_v [5] [2]:= object2_key_v;
+        object_v [6] [1]:= 'business_rule_type';
+        object_v [6] [2]:= rh.business_rule_type;
+
+        object_v [7] [1]:= 'load_type';
+        object_v [7] [2]:= rh.business_rule_load_type;
+
+        -- add business rule
+        SELECT dv_config_object_insert('dv_business_rule', object_v);
+
+        -- find newly added key
+        SELECT business_rule_key
+        INTO object3_key_v
+        FROM dv_business_rule
+        WHERE
+          owner_key = owner_key_v AND business_rule_name = rh.business_rule_name AND stage_table_key = object2_key_v;
+
+      END IF;
+
+      -- configure schedule task
+      object_v:=array_fill(NULL :: VARCHAR, ARRAY [6, 2]);
+
+      object_v [1] [1]:='release_number';
+      object_v [1] [2]:=release_number_in;
+      object_v [2] [1]:='owner_key';
+      object_v [2] [2]:= owner_key_v;
+
+      object_v [3] [1]:= 'schedule_key';
+      object_v [3] [2]:= object_key_v;
+      object_v [4] [1]:='object_key';
+      object_v [4] [2]:= coalesce(object3_key_v, object2_key_v);
+      object_v [5] [1]:= 'object_type';
+      object_v [5] [2]:= rh.object_type;
+      object_v [6] [1]:= 'load_type';
+      object_v [6] [2]:= rh.source_load_type;
+
+      -- add schedule task
+      SELECT dv_config_object_insert('dv_schedule_task', object_v);
+
+      -- find newly added key to use in hierarchy
+      SELECT schedule_task_key
+      INTO task_key_v
+      FROM dv_schedule_task
+      WHERE owner_key = owner_key_v AND object_key = coalesce(object3_key_v, object2_key_v)
+            AND object_type = rh.object_type;
+
+      -- add schedule_hierarchy
+      -- should be sorted by rn_order
+      -- source always has no parent
+
+      IF rh.object_type = 'source'
+      THEN
+        parent_task_key_v:=NULL;
+      END IF;
+
+      -- schedule task hierarchy configuration
+      object_v:=array_fill(NULL :: VARCHAR, ARRAY [4, 2]);
+
+      object_v [1] [1]:='release_number';
+      object_v [1] [2]:=release_number_in;
+      object_v [2] [1]:='owner_key';
+      object_v [2] [2]:= owner_key_v;
+
+      object_v [3] [1]:= 'schedule_task_key';
+      object_v [3] [2]:= task_key_v;
+      object_v [4] [1]:='schedule_parent_task_key';
+      object_v [4] [2]:= parent_task_key_v;
+
+      SELECT dv_config_object_insert('dv_schedule_task_hierarchy', object_v);
+
+      -- save for a use for adding next task
+      parent_task_key_v:=task_key_v;
+    END LOOP;
+
+
+  END LOOP;
+
+END
+$BODY$
+LANGUAGE plpgsql;
+
+
+-- modeller
+CREATE OR REPLACE FUNCTION dv_modeller(owner_name_in     VARCHAR, owner_desc_in VARCHAR,
+                                               release_number_in INT,
+                                               release_desc_in   VARCHAR)
+  RETURNS VOID AS
+$BODY$
+BEGIN
+
+  SELECT dv_model_l1_load_design(owner_name_in, owner_desc_in,
+                                 release_number_in,
+                                 release_desc_in);
+  SELECT dv_model_l2_load_contents(release_number_in);
+  SELECT dv_model_l3_load_mappings(release_number_in);
+  SELECT dv_model_l4_load_logic(release_number_in);
+
 
 END
 $BODY$
