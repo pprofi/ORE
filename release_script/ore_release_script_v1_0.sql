@@ -2957,6 +2957,8 @@ SET SEARCH_PATH TO public;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+SET SEARCH_PATH TO ore_config;
+
 DO $$
 DECLARE
   owner_key_v   INT;
