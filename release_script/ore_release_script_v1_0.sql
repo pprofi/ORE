@@ -72,7 +72,6 @@ CREATE UNIQUE INDEX dv_owner_name_unq
 CREATE TRIGGER dv_owner_audit
 AFTER UPDATE ON dv_owner
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 
@@ -105,7 +104,6 @@ CREATE UNIQUE INDEX dv_release_number_unq
 CREATE TRIGGER dv_release_audit
 AFTER UPDATE ON dv_release
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- defaults
@@ -142,7 +140,6 @@ CREATE UNIQUE INDEX dv_defaults_unq
 CREATE TRIGGER dv_defaults_audit
 AFTER UPDATE ON dv_defaults
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- default columns
@@ -189,7 +186,6 @@ CREATE UNIQUE INDEX dv_default_column_unq
 CREATE TRIGGER dv_default_column_audit
 AFTER UPDATE ON dv_default_column
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 /*---- source system capture -------------*/
@@ -224,7 +220,6 @@ CREATE UNIQUE INDEX source_system_name_unq
 CREATE TRIGGER dv_source_system_audit
 AFTER UPDATE ON dv_source_system
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 /* -- source tables capture -----*/
@@ -260,7 +255,6 @@ CREATE UNIQUE INDEX dv_source_table_unq
 CREATE TRIGGER dv_source_table_audit
 AFTER UPDATE ON dv_source_table
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 
@@ -297,7 +291,6 @@ CREATE UNIQUE INDEX dv_stage_table_unq
 CREATE TRIGGER dv_stage_table_audit
 AFTER UPDATE ON dv_stage_table
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- stage table columns
@@ -339,7 +332,6 @@ CREATE UNIQUE INDEX dv_stage_table_column_unq
 CREATE TRIGGER dv_stage_table_column_audit
 AFTER UPDATE ON dv_stage_table_column
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 
@@ -356,18 +348,18 @@ CREATE SEQUENCE dv_business_rule_key_seq START 1;
 CREATE TABLE dv_business_rule
 (
   business_rule_key   INTEGER                  DEFAULT nextval(
-      'dv_business_rule_key_seq' :: REGCLASS) PRIMARY KEY                                          NOT NULL,
-  stage_table_key     INTEGER                                                                      NOT NULL,
-  business_rule_name  VARCHAR(128)                                                                 NOT NULL,
-  business_rule_type  VARCHAR(20) DEFAULT 'internal_sql' :: CHARACTER VARYING                      NOT NULL,
-  business_rule_logic TEXT                                                                         NOT NULL,
-  load_type           VARCHAR(50)                                                                  NOT NULL,
-  is_external         BOOLEAN DEFAULT FALSE                                                        NOT NULL,
-  is_retired          BOOLEAN DEFAULT FALSE                                                        NOT NULL,
-  release_key         INTEGER DEFAULT 1                                                            NOT NULL,
-  owner_key           INTEGER DEFAULT 1                                                            NOT NULL,
-  version_number      INTEGER DEFAULT 1                                                            NOT NULL,
-  updated_by          VARCHAR(50) DEFAULT "current_user"()                                         NOT NULL,
+      'dv_business_rule_key_seq' :: REGCLASS) PRIMARY KEY                                           NOT NULL,
+  stage_table_key     INTEGER                                                                       NOT NULL,
+  business_rule_name  VARCHAR(128)                                                                  NOT NULL,
+  business_rule_type  VARCHAR(20) DEFAULT 'internal_sql' :: CHARACTER VARYING                       NOT NULL,
+  business_rule_logic TEXT                                                                          NOT NULL,
+  load_type           VARCHAR(50)                                                                   NOT NULL,
+  is_external         BOOLEAN DEFAULT FALSE                                                         NOT NULL,
+  is_retired          BOOLEAN DEFAULT FALSE                                                         NOT NULL,
+  release_key         INTEGER DEFAULT 1                                                             NOT NULL,
+  owner_key           INTEGER DEFAULT 1                                                             NOT NULL,
+  version_number      INTEGER DEFAULT 1                                                             NOT NULL,
+  updated_by          VARCHAR(50) DEFAULT "current_user"()                                          NOT NULL,
   updated_datetime    TIMESTAMP WITH TIME ZONE DEFAULT now(),
   CONSTRAINT fk_dv_business_rule_dv_stage_table FOREIGN KEY (stage_table_key) REFERENCES dv_stage_table (stage_table_key),
   CONSTRAINT fk_dv_business_rule_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
@@ -381,7 +373,6 @@ CREATE UNIQUE INDEX dv_business_rule_key_unq
 CREATE TRIGGER dv_business_rule_audit
 AFTER UPDATE ON dv_business_rule
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- hub config
@@ -396,14 +387,14 @@ CREATE SEQUENCE dv_hub_key_seq START 1;
 CREATE TABLE dv_hub
 (
   hub_key          INTEGER                  DEFAULT nextval(
-      'dv_hub_key_seq' :: REGCLASS) PRIMARY KEY                                                       NOT NULL,
-  hub_name         VARCHAR(128)                                                                       NOT NULL,
-  hub_schema       VARCHAR(128)                                                                       NOT NULL,
-  is_retired       BOOLEAN DEFAULT FALSE                                                              NOT NULL,
-  release_key      INTEGER DEFAULT 1                                                                  NOT NULL,
-  owner_key        INTEGER DEFAULT 1                                                                  NOT NULL,
-  version_number   INTEGER DEFAULT 1                                                                  NOT NULL,
-  updated_by       VARCHAR(50) DEFAULT current_user                                                   NOT NULL,
+      'dv_hub_key_seq' :: REGCLASS) PRIMARY KEY                                                             NOT NULL,
+  hub_name         VARCHAR(128)                                                                             NOT NULL,
+  hub_schema       VARCHAR(128)                                                                             NOT NULL,
+  is_retired       BOOLEAN DEFAULT FALSE                                                                    NOT NULL,
+  release_key      INTEGER DEFAULT 1                                                                        NOT NULL,
+  owner_key        INTEGER DEFAULT 1                                                                        NOT NULL,
+  version_number   INTEGER DEFAULT 1                                                                        NOT NULL,
+  updated_by       VARCHAR(50) DEFAULT current_user                                                         NOT NULL,
   updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
   CONSTRAINT fk_dv_hub_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
   CONSTRAINT fk_dv_hub_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
@@ -416,7 +407,6 @@ CREATE UNIQUE INDEX dv_hub_unq
 CREATE TRIGGER dv_hub_audit
 AFTER UPDATE ON dv_hub
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- hub key config
@@ -456,7 +446,6 @@ CREATE UNIQUE INDEX dv_hub_key_column_unq
 CREATE TRIGGER dv_hub_key_column_audit
 AFTER UPDATE ON dv_hub_key_column
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- hub column config
@@ -492,7 +481,6 @@ CREATE UNIQUE INDEX dv_hub_column_unq
 CREATE TRIGGER dv_hub_column_audit
 AFTER UPDATE ON dv_hub_column
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- config satellite
@@ -509,17 +497,17 @@ CREATE TABLE dv_satellite
 (
   satellite_key           INTEGER                  DEFAULT nextval(
       'dv_satellite_key_seq' ::
-      REGCLASS) PRIMARY KEY                                                                                     NOT NULL,
-  hub_key                 INTEGER DEFAULT 0                                                                     NOT NULL,
-  link_key                INTEGER DEFAULT 0                                                                     NOT NULL,
-  link_hub_satellite_flag CHAR DEFAULT 'H' :: bpchar                                                            NOT NULL,
-  satellite_name          VARCHAR(128)                                                                          NOT NULL,
-  satellite_schema        VARCHAR(128)                                                                          NOT NULL,
-  is_retired              BOOLEAN DEFAULT FALSE                                                                 NOT NULL,
-  release_key             INTEGER DEFAULT 1                                                                     NOT NULL,
-  owner_key               INTEGER DEFAULT 1                                                                     NOT NULL,
-  version_number          INTEGER DEFAULT 1                                                                     NOT NULL,
-  updated_by              VARCHAR(50) DEFAULT current_user                                                      NOT NULL,
+      REGCLASS) PRIMARY KEY                                                                                               NOT NULL,
+  hub_key                 INTEGER DEFAULT 0                                                                               NOT NULL,
+  link_key                INTEGER DEFAULT 0                                                                               NOT NULL,
+  link_hub_satellite_flag CHAR DEFAULT 'H' :: bpchar                                                                      NOT NULL,
+  satellite_name          VARCHAR(128)                                                                                    NOT NULL,
+  satellite_schema        VARCHAR(128)                                                                                    NOT NULL,
+  is_retired              BOOLEAN DEFAULT FALSE                                                                           NOT NULL,
+  release_key             INTEGER DEFAULT 1                                                                               NOT NULL,
+  owner_key               INTEGER DEFAULT 1                                                                               NOT NULL,
+  version_number          INTEGER DEFAULT 1                                                                               NOT NULL,
+  updated_by              VARCHAR(50) DEFAULT current_user                                                                NOT NULL,
   updated_datetime        TIMESTAMP WITH TIME ZONE DEFAULT now(),
   CONSTRAINT fk_dv_satellite_dv_hub FOREIGN KEY (hub_key) REFERENCES dv_hub (hub_key),
   CONSTRAINT fk_dv_satellite_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
@@ -532,7 +520,6 @@ CREATE UNIQUE INDEX dv_satellite_unq
 CREATE TRIGGER dv_satellite_audit
 AFTER UPDATE ON dv_satellite
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- configure sat columns and link them with source columns
@@ -570,7 +557,6 @@ CREATE UNIQUE INDEX dv_satellite_column_unq
 CREATE TRIGGER dv_satellite_column_audit
 AFTER UPDATE ON dv_satellite_column
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 -- column type
@@ -1855,13 +1841,16 @@ BEGIN
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
 
 END
-$fun$
+$fun$;
 
 
-  /*************************function dealing with source and stage processing statuses**********************************/
+/*************************function dealing with source and stage processing statuses**********************************/
 
+DO $$
+BEGIN
   RAISE NOTICE 'Configuring helper functions...';
-
+END
+$$;
 
 CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in CHARACTER VARYING,
                                                         table_name_in   CHARACTER VARYING,
@@ -1894,7 +1883,7 @@ BEGIN
   RETURN sql_v;
 
 END
-$$
+$$;
 
 
 CREATE FUNCTION fn_source_cleanup(table_schema_in CHARACTER VARYING, table_name_in CHARACTER VARYING)
@@ -1912,12 +1901,16 @@ BEGIN
   RETURN sql_v;
 
 END
-$$
+$$;
 
 
+/************************* logger **********************************************************************/
 
-  /************************* logger **********************************************************************/
+DO $$
+BEGIN
   RAISE NOTICE 'Configuring logging module...';
+END
+$$;
 
 
 CREATE SEQUENCE dv_log_id_seq START 1;
@@ -1945,8 +1938,12 @@ $BODY$
 LANGUAGE plpgsql;
 
 /************************* scheduler **********************************************************************/
+DO $$
+BEGIN
+  RAISE NOTICE 'Configuring schedule module...';
+END
+$$;
 
-RAISE NOTICE 'Configuring schedule module...';
 
 CREATE SEQUENCE dv_schedule_seq START 1;
 
@@ -1976,7 +1973,6 @@ CREATE UNIQUE INDEX dv_schedule_unq
 CREATE TRIGGER dv_schedule_audit
 AFTER UPDATE ON dv_schedule
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 
@@ -2007,7 +2003,6 @@ CREATE UNIQUE INDEX dv_schedule_task_unq
 CREATE TRIGGER dv_schedule_task_audit
 AFTER UPDATE ON dv_schedule_task
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
 CREATE SEQUENCE dv_schedule_task_hierarchy_seq START 1;
@@ -2030,6 +2025,11 @@ CREATE TABLE dv_schedule_task_hierarchy
 
 CREATE UNIQUE INDEX dv_schedule_task_hierarchy_unq
   ON dv_schedule_task_hierarchy (owner_key, schedule_task_key, schedule_parent_task_key);
+
+CREATE TRIGGER dv_schedule_task_hierarchy_audit
+AFTER UPDATE ON dv_schedule_task_hierarchy
+FOR EACH ROW
+EXECUTE PROCEDURE dv_config_audit();
 
 CREATE OR REPLACE FUNCTION ore_config.dv_run_next_schedule_task(job_id_in          INTEGER, schedule_key_in INTEGER,
                                                                 parent_task_key_in INTEGER)
@@ -2169,7 +2169,7 @@ BEGIN
 
   RETURN 1;
 END
-$$
+$$;
 
 
 CREATE OR REPLACE FUNCTION dv_init_schedule_task_run()
@@ -2449,14 +2449,15 @@ BEGIN
   INTO state_v;
 
 END
-$$
+$$;
 
 
-
-
-
-  /************************* modeller package**********************************************************************/
+/************************* modeller package**********************************************************************/
+DO $$
+BEGIN
   RAISE NOTICE 'Configuring modeller...';
+END
+$$;
 
 CREATE TABLE dv_model_L1_design
 (
