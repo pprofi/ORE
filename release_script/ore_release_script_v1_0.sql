@@ -9,14 +9,14 @@ BEGIN
 
   RAISE NOTICE 'Creating config schema...';
 
-    IF NOT EXISTS(
-        SELECT schema_name
-          FROM information_schema.schemata
-          WHERE schema_name = 'ore_config'
-      )
-    THEN
-      EXECUTE 'CREATE SCHEMA ore_config';
-    END IF;
+  IF NOT EXISTS(
+      SELECT schema_name
+      FROM information_schema.schemata
+      WHERE schema_name = 'ore_config'
+  )
+  THEN
+    EXECUTE 'CREATE SCHEMA ore_config';
+  END IF;
 
 END
 $$;
@@ -50,12 +50,13 @@ BEGIN
   RAISE NOTICE 'Creating dv_owner...';
 END
 $$;
-  /*------ dv owner capture ---------------*/
+/*------ dv owner capture ---------------*/
 CREATE SEQUENCE dv_owner_key_seq START 1;
 
 CREATE TABLE dv_owner
 (
-  owner_key         INTEGER                  DEFAULT nextval('dv_owner_key_seq' :: REGCLASS) PRIMARY KEY NOT NULL,
+  owner_key         INTEGER                  DEFAULT nextval(
+      'dv_owner_key_seq' :: REGCLASS) PRIMARY KEY                                                        NOT NULL,
   owner_name        VARCHAR(256),
   owner_description VARCHAR(256),
   is_retired        BOOLEAN DEFAULT FALSE                                                                NOT NULL,
@@ -117,7 +118,8 @@ $$;
 CREATE SEQUENCE dv_defaults_key_seq START 1;
 CREATE TABLE ore_config.dv_defaults
 (
-  default_key      INTEGER                  DEFAULT nextval('dv_defaults_key_seq' :: REGCLASS) PRIMARY KEY NOT NULL,
+  default_key      INTEGER                  DEFAULT nextval(
+      'dv_defaults_key_seq' :: REGCLASS) PRIMARY KEY                                                       NOT NULL,
   default_type     VARCHAR(50)                                                                             NOT NULL,
   default_subtype  VARCHAR(50)                                                                             NOT NULL,
   default_sequence INTEGER                                                                                 NOT NULL,
@@ -142,7 +144,6 @@ AFTER UPDATE ON dv_defaults
 FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
-
 
 -- default columns
 
@@ -310,23 +311,23 @@ CREATE SEQUENCE dv_stage_table_column_key_seq START 1;
 
 CREATE TABLE dv_stage_table_column
 (
-  column_key              INTEGER                  DEFAULT nextval(
+  column_key       INTEGER                  DEFAULT nextval(
       'dv_stage_table_column_key_seq' :: REGCLASS) PRIMARY KEY                                             NOT NULL,
-  stage_table_key         INTEGER                                                                          NOT NULL,
-  column_name             VARCHAR(128)                                                                     NOT NULL,
-  column_type             VARCHAR(30)                                                                      NOT NULL,
-  column_length           INTEGER,
-  column_precision        INTEGER,
-  column_scale            INTEGER,
-  collation_name          VARCHAR(128),
-  is_source_date          BOOLEAN DEFAULT FALSE                                                            NOT NULL,
-  discard_flag            BOOLEAN DEFAULT FALSE                                                            NOT NULL,
-  is_retired              BOOLEAN DEFAULT FALSE                                                            NOT NULL,
-  release_key             INTEGER DEFAULT 1                                                                NOT NULL,
-  owner_key               INTEGER DEFAULT 1                                                                NOT NULL,
-  version_number          INTEGER DEFAULT 1                                                                NOT NULL,
-  updated_by              VARCHAR(50) DEFAULT current_user                                                 NOT NULL,
-  updated_datetime        TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  stage_table_key  INTEGER                                                                                 NOT NULL,
+  column_name      VARCHAR(128)                                                                            NOT NULL,
+  column_type      VARCHAR(30)                                                                             NOT NULL,
+  column_length    INTEGER,
+  column_precision INTEGER,
+  column_scale     INTEGER,
+  collation_name   VARCHAR(128),
+  is_source_date   BOOLEAN DEFAULT FALSE                                                                   NOT NULL,
+  discard_flag     BOOLEAN DEFAULT FALSE                                                                   NOT NULL,
+  is_retired       BOOLEAN DEFAULT FALSE                                                                   NOT NULL,
+  release_key      INTEGER DEFAULT 1                                                                       NOT NULL,
+  owner_key        INTEGER DEFAULT 1                                                                       NOT NULL,
+  version_number   INTEGER DEFAULT 1                                                                       NOT NULL,
+  updated_by       VARCHAR(50) DEFAULT current_user                                                        NOT NULL,
+  updated_datetime TIMESTAMP WITH TIME ZONE DEFAULT now(),
   CONSTRAINT fk_dv_stage_table_column_dv_stage_table FOREIGN KEY (stage_table_key) REFERENCES dv_stage_table (stage_table_key),
   CONSTRAINT fk_dv_stage_table_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
   CONSTRAINT fk_dv_stage_table_column_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
@@ -355,18 +356,18 @@ CREATE SEQUENCE dv_business_rule_key_seq START 1;
 CREATE TABLE dv_business_rule
 (
   business_rule_key   INTEGER                  DEFAULT nextval(
-      'dv_business_rule_key_seq' :: REGCLASS) PRIMARY KEY                                         NOT NULL,
-  stage_table_key     INTEGER                                                                     NOT NULL,
-  business_rule_name  VARCHAR(128)                                                                NOT NULL,
-  business_rule_type  VARCHAR(20) DEFAULT 'internal_sql' :: CHARACTER VARYING                     NOT NULL,
-  business_rule_logic TEXT                                                                        NOT NULL,
-  load_type           VARCHAR(50)                                                                 NOT NULL,
-  is_external         BOOLEAN DEFAULT FALSE                                                       NOT NULL,
-  is_retired          BOOLEAN DEFAULT FALSE                                                       NOT NULL,
-  release_key         INTEGER DEFAULT 1                                                           NOT NULL,
-  owner_key           INTEGER DEFAULT 1                                                           NOT NULL,
-  version_number      INTEGER DEFAULT 1                                                           NOT NULL,
-  updated_by          VARCHAR(50) DEFAULT "current_user"()                                        NOT NULL,
+      'dv_business_rule_key_seq' :: REGCLASS) PRIMARY KEY                                          NOT NULL,
+  stage_table_key     INTEGER                                                                      NOT NULL,
+  business_rule_name  VARCHAR(128)                                                                 NOT NULL,
+  business_rule_type  VARCHAR(20) DEFAULT 'internal_sql' :: CHARACTER VARYING                      NOT NULL,
+  business_rule_logic TEXT                                                                         NOT NULL,
+  load_type           VARCHAR(50)                                                                  NOT NULL,
+  is_external         BOOLEAN DEFAULT FALSE                                                        NOT NULL,
+  is_retired          BOOLEAN DEFAULT FALSE                                                        NOT NULL,
+  release_key         INTEGER DEFAULT 1                                                            NOT NULL,
+  owner_key           INTEGER DEFAULT 1                                                            NOT NULL,
+  version_number      INTEGER DEFAULT 1                                                            NOT NULL,
+  updated_by          VARCHAR(50) DEFAULT "current_user"()                                         NOT NULL,
   updated_datetime    TIMESTAMP WITH TIME ZONE DEFAULT now(),
   CONSTRAINT fk_dv_business_rule_dv_stage_table FOREIGN KEY (stage_table_key) REFERENCES dv_stage_table (stage_table_key),
   CONSTRAINT fk_dv_business_rule_column_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
@@ -383,7 +384,6 @@ FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
-
 -- hub config
 DO $$
 BEGIN
@@ -395,7 +395,8 @@ CREATE SEQUENCE dv_hub_key_seq START 1;
 
 CREATE TABLE dv_hub
 (
-  hub_key          INTEGER                  DEFAULT nextval('dv_hub_key_seq' :: REGCLASS) PRIMARY KEY NOT NULL,
+  hub_key          INTEGER                  DEFAULT nextval(
+      'dv_hub_key_seq' :: REGCLASS) PRIMARY KEY                                                       NOT NULL,
   hub_name         VARCHAR(128)                                                                       NOT NULL,
   hub_schema       VARCHAR(128)                                                                       NOT NULL,
   is_retired       BOOLEAN DEFAULT FALSE                                                              NOT NULL,
@@ -417,7 +418,6 @@ AFTER UPDATE ON dv_hub
 FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
-
 
 -- hub key config
 DO $$
@@ -495,7 +495,6 @@ FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
-
 -- config satellite
 
 DO $$
@@ -508,19 +507,20 @@ CREATE SEQUENCE dv_satellite_key_seq START 1;
 
 CREATE TABLE dv_satellite
 (
-  satellite_key               INTEGER                  DEFAULT nextval(
-      'dv_satellite_key_seq' :: REGCLASS) PRIMARY KEY                                                 NOT NULL,
-  hub_key                     INTEGER DEFAULT 0                                                       NOT NULL,
-  link_key                    INTEGER DEFAULT 0                                                       NOT NULL,
-  link_hub_satellite_flag     CHAR DEFAULT 'H' :: bpchar                                              NOT NULL,
-  satellite_name              VARCHAR(128)                                                            NOT NULL,
-  satellite_schema            VARCHAR(128)                                                            NOT NULL,
-  is_retired                  BOOLEAN DEFAULT FALSE                                                   NOT NULL,
-  release_key                 INTEGER DEFAULT 1                                                       NOT NULL,
-  owner_key                   INTEGER DEFAULT 1                                                       NOT NULL,
-  version_number              INTEGER DEFAULT 1                                                       NOT NULL,
-  updated_by                  VARCHAR(50) DEFAULT current_user                                        NOT NULL,
-  updated_datetime            TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  satellite_key           INTEGER                  DEFAULT nextval(
+      'dv_satellite_key_seq' ::
+      REGCLASS) PRIMARY KEY                                                                                     NOT NULL,
+  hub_key                 INTEGER DEFAULT 0                                                                     NOT NULL,
+  link_key                INTEGER DEFAULT 0                                                                     NOT NULL,
+  link_hub_satellite_flag CHAR DEFAULT 'H' :: bpchar                                                            NOT NULL,
+  satellite_name          VARCHAR(128)                                                                          NOT NULL,
+  satellite_schema        VARCHAR(128)                                                                          NOT NULL,
+  is_retired              BOOLEAN DEFAULT FALSE                                                                 NOT NULL,
+  release_key             INTEGER DEFAULT 1                                                                     NOT NULL,
+  owner_key               INTEGER DEFAULT 1                                                                     NOT NULL,
+  version_number          INTEGER DEFAULT 1                                                                     NOT NULL,
+  updated_by              VARCHAR(50) DEFAULT current_user                                                      NOT NULL,
+  updated_datetime        TIMESTAMP WITH TIME ZONE DEFAULT now(),
   CONSTRAINT fk_dv_satellite_dv_hub FOREIGN KEY (hub_key) REFERENCES dv_hub (hub_key),
   CONSTRAINT fk_dv_satellite_dv_release FOREIGN KEY (release_key) REFERENCES dv_release (release_key),
   CONSTRAINT fk_dv_satellite_dv_owner FOREIGN KEY (owner_key) REFERENCES dv_owner (owner_key)
@@ -573,7 +573,6 @@ FOR EACH ROW
 WHEN (OLD.* IS DISTINCT FROM NEW.*)
 EXECUTE PROCEDURE dv_config_audit();
 
-
 -- column type
 DO $$
 BEGIN
@@ -584,13 +583,13 @@ $$;
 CREATE TYPE dv_column_type AS
 (
   column_name      VARCHAR(128),
-  column_type      VARCHAR(50) ,
-  column_length    INT ,
-  column_precision INT ,
-  column_scale     INT ,
-  is_nullable int,
-  is_key int,
-  is_indexed int
+  column_type      VARCHAR(50),
+  column_length    INT,
+  column_precision INT,
+  column_scale     INT,
+  is_nullable      INT,
+  is_key           INT,
+  is_indexed       INT
 );
 
 /************************************** config  functions ************************************************************/
@@ -609,7 +608,7 @@ $BODY$
 DECLARE
   result_v VARCHAR(500);
 BEGIN
--- build column definition
+  -- build column definition
   result_v:= r.column_name;
 
   -- if key
@@ -640,7 +639,7 @@ BEGIN
 
   END IF;
 
-raise NOTICE 'Column defenition % -->',result_v;
+  RAISE NOTICE 'Column defenition % -->', result_v;
 
   RETURN result_v;
 
@@ -655,8 +654,9 @@ BEGIN
 END
 $$;
 -- function for getting set of default columns for data vault object
-CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_name_in VARCHAR(128), object_type_in VARCHAR(128),
-  object_column_type_in varchar(30) default NULL -- all or particular type
+CREATE OR REPLACE FUNCTION fn_get_dv_object_default_columns(object_name_in        VARCHAR(128),
+                                                            object_type_in        VARCHAR(128),
+                                                            object_column_type_in VARCHAR(30) DEFAULT NULL -- all or particular type
 )
   RETURNS SETOF dv_column_type AS
 $BODY$
@@ -665,7 +665,7 @@ DECLARE
 BEGIN
 
   -- check parameter
-  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite','stage_table')
+  IF COALESCE(object_type_in, '') NOT IN ('hub', 'link', 'satellite', 'stage_table')
   THEN
     RAISE NOTICE 'Not valid object type: can be only hub, satellite --> %', object_type_in;
     RETURN;
@@ -675,7 +675,7 @@ BEGIN
               CASE WHEN d.object_column_type = 'Object_Key'
                 THEN rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', object_name_in) ||
                            coalesce(column_suffix, ''))
-              ELSE d.column_name END AS column_name,
+              ELSE d.column_name END        AS column_name,
 
               column_type,
               column_length,
@@ -683,14 +683,14 @@ BEGIN
               column_scale,
               CASE WHEN d.object_column_type = 'Object_Key'
                 THEN 0
-              ELSE 1 END             AS is_nullable,
+              ELSE 1 END                    AS is_nullable,
               CASE WHEN d.object_column_type = 'Object_Key'
                 THEN 1
-              ELSE 0 END             AS is_key,
-             cast(d.is_indexed as integer) as is_indexed
+              ELSE 0 END                    AS is_key,
+              cast(d.is_indexed AS INTEGER) AS is_indexed
             FROM dv_default_column d
             WHERE object_type = object_type_in
-            and (d.object_column_type=object_column_type_in or object_column_type_in is null)
+                  AND (d.object_column_type = object_column_type_in OR object_column_type_in IS NULL)
             ORDER BY is_key DESC) LOOP
     RETURN NEXT r;
   END LOOP;
@@ -698,7 +698,6 @@ BEGIN
 END
 $BODY$
 LANGUAGE 'plpgsql';
-
 
 -- get object name
 
@@ -999,7 +998,7 @@ BEGIN
           replace(c.data_type, 'character varying', 'varchar') AS data_type,
           CASE WHEN c.column_name = kcu.column_name
             THEN 1
-          ELSE 0 END                                        AS is_key,
+          ELSE 0 END                                           AS is_key,
           CASE WHEN c.column_name IN ('updated_by', 'updated_datetime')
             THEN 1
           ELSE 0 END                                              is_no_update
@@ -1055,7 +1054,7 @@ BEGIN
           data_type
         INTO column_name_v, column_data_type_v
         FROM columns_list_tmp
-        WHERE is_key=0  AND is_no_update =0 AND column_name = object_settings_in [i] [1];
+        WHERE is_key = 0 AND is_no_update = 0 AND column_name = object_settings_in [i] [1];
 
         GET DIAGNOSTICS rowcount_v = ROW_COUNT;
 
@@ -1113,13 +1112,13 @@ CREATE OR REPLACE FUNCTION dv_config_object_delete
     object_type_in VARCHAR(100), -- table name in a list of
     object_key_in  INTEGER
   )
-RETURNS INT AS
+  RETURNS INT AS
 $BODY$
 DECLARE
-  rowcount_v   INTEGER :=0;
-  key_column_v VARCHAR(50);
-  sql_v        VARCHAR(2000);
-  object_schema_v varchar(50):='ore_config';
+  rowcount_v      INTEGER :=0;
+  key_column_v    VARCHAR(50);
+  sql_v           VARCHAR(2000);
+  object_schema_v VARCHAR(50) :='ore_config';
 BEGIN
 
   -- check if table exists
@@ -1148,13 +1147,13 @@ BEGIN
     RAISE NOTICE 'Not valid object type --> %', object_type_in;
   ELSE
     -- delete record
-  EXECUTE 'delete from '
-          || ' '
-          || quote_ident(object_type_in)
-          || ' where '
-          || quote_ident(key_column_v)
-          || '='
-          || quote_literal(object_key_in);
+    EXECUTE 'delete from '
+            || ' '
+            || quote_ident(object_type_in)
+            || ' where '
+            || quote_ident(key_column_v)
+            || '='
+            || quote_literal(object_key_in);
   END IF;
 
   -- check if something actually been deleted
@@ -1243,8 +1242,8 @@ BEGIN
   sql_create_v:='create table ' || object_schema_in || '.' || object_name_in || newline_v || '(' || newline_v;
   sql_create_index_v:=
   'create unique index ux_' || object_name_in || '_' || public.uuid_generate_v4() || newline_v || ' on ' ||
-   object_schema_in || '.' ||object_name_in || newline_v || '(';
-  sql_create_index_v:=replace(sql_create_index_v,'-','_');
+  object_schema_in || '.' || object_name_in || newline_v || '(';
+  sql_create_index_v:=replace(sql_create_index_v, '-', '_');
 
   -- column definitions
   -- open cursor
@@ -1295,9 +1294,9 @@ END
 $$;
 
 CREATE OR REPLACE FUNCTION dv_config_dv_create_hub(
-  object_name_in      VARCHAR(128),
-  object_schema_in    VARCHAR(128),
-  recreate_flag_in    CHAR(1) = 'N'
+  object_name_in   VARCHAR(128),
+  object_schema_in VARCHAR(128),
+  recreate_flag_in CHAR(1) = 'N'
 )
   RETURNS TEXT AS
 $BODY$
@@ -1306,7 +1305,7 @@ DECLARE
   sql_v              TEXT;
   sql_create_table_v TEXT;
   sql_create_index_v TEXT;
-  hub_name_v varchar(200);
+  hub_name_v         VARCHAR(200);
 
     rec CURSOR FOR SELECT *
                    FROM fn_get_dv_object_default_columns(object_name_in, 'hub')
@@ -1319,20 +1318,20 @@ DECLARE
                      hkc.hub_key_column_scale     AS column_scale,
                      1                            AS is_nullable,
                      0                            AS is_key,
-                     1 as is_indexed
+                     1                            AS is_indexed
                    FROM ore_config.dv_hub h
                      INNER JOIN ore_config.dv_hub_key_column hkc
                        ON h.hub_key = hkc.hub_key
                    WHERE h.hub_schema = object_schema_in
                          AND h.hub_name = object_name_in
-                      ;
+  ;
 BEGIN
 
   OPEN rec;
 
   -- create statement
   -- generate hub name
-  hub_name_v:=fn_get_object_name(object_name_in,'hub');
+  hub_name_v:=fn_get_object_name(object_name_in, 'hub');
 
   SELECT ore_config.dv_config_dv_table_create(hub_name_v,
                                               object_schema_in,
@@ -1349,7 +1348,6 @@ BEGIN
 END
 $BODY$
 LANGUAGE 'plpgsql';
-
 
 -- create satellite
 DO $$
@@ -1461,24 +1459,24 @@ DECLARE
   sql_v              TEXT;
   sql_create_table_v TEXT;
   sql_create_index_v TEXT;
-  rec CURSOR FOR
+    rec CURSOR FOR
     SELECT *
-                   FROM fn_get_dv_object_default_columns(object_name_in, 'stage_table')
-                   UNION ALL
-                   SELECT
-                     sc.column_name,
-                     sc.column_type,
-                     sc.column_length,
-                     sc.column_precision,
-                     sc.column_scale,
-                     0 AS is_nullable,
-                     0 AS is_key,
-                     0 AS is_indexed
-                   FROM dv_stage_table t
-                     INNER JOIN dv_stage_table_column sc
-                       ON t.stage_table_key = sc.stage_table_key
-                   WHERE t.stage_table_schema = object_schema_in
-                         AND t.stage_table_name = object_name_in
+    FROM fn_get_dv_object_default_columns(object_name_in, 'stage_table')
+    UNION ALL
+    SELECT
+      sc.column_name,
+      sc.column_type,
+      sc.column_length,
+      sc.column_precision,
+      sc.column_scale,
+      0 AS is_nullable,
+      0 AS is_key,
+      0 AS is_indexed
+    FROM dv_stage_table t
+      INNER JOIN dv_stage_table_column sc
+        ON t.stage_table_key = sc.stage_table_key
+    WHERE t.stage_table_schema = object_schema_in
+          AND t.stage_table_name = object_name_in
 
   ;
 BEGIN
@@ -1511,27 +1509,25 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(
-  stage_table_schema_in VARCHAR(128),
-  stage_table_name_in   VARCHAR(128),
-  hub_schema_in         VARCHAR(128),
-  hub_name_in           VARCHAR(128)
-)
-  RETURNS TEXT AS
-$body$
+CREATE OR REPLACE FUNCTION dv_config_dv_load_hub(stage_table_schema_in CHARACTER VARYING,
+                                                 stage_table_name_in   CHARACTER VARYING,
+                                                 hub_schema_in         CHARACTER VARYING, hub_name_in CHARACTER VARYING)
+  RETURNS TEXT
+LANGUAGE plpgsql
+AS $fun$
 DECLARE
-  sql_block_start_v    TEXT:='';
-  sql_block_end_v      TEXT:='';
+  sql_block_start_v    TEXT :='';
+  sql_block_end_v      TEXT :='';
   sql_block_body_v     TEXT;
-  sql_process_start_v  TEXT:='';
-  sql_process_finish_v TEXT:='';
+  sql_process_start_v  TEXT :='';
+  sql_process_finish_v TEXT :='';
   delimiter_v          CHAR(2) :=',';
   newline_v            CHAR(3) :=E'\n';
-  load_date_time_v          VARCHAR(10):='now()';
-  hub_name_v varchar(50);
+  load_date_time_v     VARCHAR(10) :='now()';
+  hub_name_v           VARCHAR(50);
 BEGIN
-/*-----TO DO add error handling generation if load failed checks on counts
-  */
+  /*-----TO DO add error handling generation if load failed checks on counts
+    */
 
   -- hub name check
   hub_name_v:= fn_get_object_name(hub_name_in, 'hub');
@@ -1542,15 +1538,30 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- code snippets
+  /* sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+   sql_block_end_v:=newline_v || 'end$$;';
 
-    -- dynamic upsert statement
+   -- update processing status stage
+   sql_process_start_v:=
+   'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' || quote_literal('PROCESSING') ||
+   ' where status=' ||
+   quote_literal('RAW')||';'||newline_v;
+   sql_process_finish_v:=
+   newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
+   quote_literal('PROCESSED') || ' where status=' ||
+   quote_literal('PROCESSING')||';'||newline_v;
+
+ */
+
+  -- dynamic upsert statement
   -- add process status select-update in transaction
   WITH sql AS (
     SELECT
       stc.column_name            stage_col_name,
       hkc.hub_key_column_name    hub_col_name,
       hkc.hub_key_column_type AS column_type,
-      1 as is_bk
+      1                       AS is_bk
     FROM dv_stage_table st
       JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
       JOIN dv_hub_column hc ON hc.column_key = stc.column_key
@@ -1571,7 +1582,7 @@ BEGIN
       END         AS stage_col_name,
       column_name AS hub_col_name,
       column_type,
-      0 as is_bk
+      0           AS is_bk
     FROM fn_get_dv_object_default_columns(hub_name_in, 'hub')
     WHERE is_key = 0
   )
@@ -1582,8 +1593,9 @@ BEGIN
                                 ', ') AS ssql
          FROM sql
          UNION ALL
-         SELECT DISTINCT ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where dv_process_status=' ||
-                         quote_literal('PROCESSING') || ')'
+         SELECT DISTINCT
+           ' from ' || stage_table_schema_in || '.' || stage_table_name_in || ' where dv_process_status=' ||
+           quote_literal('PROCESSING') || ')'
          FROM sql
          UNION ALL
          SELECT 'insert into ' || hub_schema_in || '.' || hub_name_v || '(' ||
@@ -1591,16 +1603,17 @@ BEGIN
          FROM sql
          -- GROUP BY sql.hub_schema, fn_get_object_name(sql.hub_name, 'hub')
          UNION ALL
-         SELECT DISTINCT 'select * from src' || E'\n' || 'on conflict(' || array_to_string(array_agg(sql.hub_col_name), ', ') ||
-                         ') ' || 'do nothing;' || E'\n'
-         FROM sql where is_bk=1) t
+         SELECT DISTINCT
+           'select * from src' || E'\n' || 'on conflict(' || array_to_string(array_agg(sql.hub_col_name), ', ') ||
+           ') ' || 'do nothing;' || E'\n'
+         FROM sql
+         WHERE is_bk = 1) t
   INTO sql_block_body_v;
 
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
 
 END
-$body$;
-
+$fun$;
 
 
 DO $$
@@ -1609,8 +1622,13 @@ BEGIN
 END
 $$;
 
-CREATE or replace FUNCTION dv_config_dv_load_satellite (stage_table_schema_in character varying, stage_table_name_in character varying, satellite_schema_in character varying, satellite_name_in character varying, load_type_in character varying DEFAULT 'delta'::character varying) RETURNS text
-	LANGUAGE plpgsql
+CREATE OR REPLACE FUNCTION dv_config_dv_load_satellite(stage_table_schema_in CHARACTER VARYING,
+                                                       stage_table_name_in   CHARACTER VARYING,
+                                                       satellite_schema_in   CHARACTER VARYING,
+                                                       satellite_name_in     CHARACTER VARYING,
+                                                       load_type_in          CHARACTER VARYING DEFAULT 'delta' :: CHARACTER VARYING)
+  RETURNS TEXT
+LANGUAGE plpgsql
 AS $fun$
 DECLARE
   sql_block_start_v    TEXT :='';
@@ -1648,169 +1666,190 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- code snippets
+  -- block
+  /* sql_block_start_v:='DO $$' || newline_v || 'begin' || newline_v;
+   sql_block_end_v:=newline_v || 'end$$;';
 
+   -- update status of records in stage table
+   sql_process_start_v:=
+   'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' || quote_literal('PROCESSING') ||
+   ' where status=' ||
+   quote_literal('RAW') || ';' || newline_v;
+   sql_process_finish_v:=
+   newline_v || 'update ' || stage_table_schema_in || '.' || stage_table_name_in || ' set status=' ||
+   quote_literal('PROCESSED') || ' where status=' ||
+   quote_literal('PROCESSING') || ';' || newline_v;
+
+ */
+
+  -- dynamic upsert statement
+  -- full load means that records for whose keys in staging not found will be marked as deleted
+  -- lookup keys in hub
+  -- insert records for new keys
+  -- update changed records for existing keys, insert new record with changed values
 
   WITH sql AS (
-  -- list of stage table- satellite match and hub key lookup column
-  SELECT
-    stc.column_name AS stage_col_name,
-    stc.column_name AS sat_col_name,
-    stc.column_type,
-    0               AS is_surrogate_key,
-    hkc.hub_key_column_name,
-    hkc.hub_key_column_type,
-    0                  is_default,
-    CASE WHEN hkc.hub_key_column_name IS NOT NULL
-      THEN 1
-    ELSE 0 END         is_business_key
-  FROM dv_stage_table st
-    JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
-    JOIN dv_satellite_column sc ON sc.column_key = stc.column_key
-    JOIN dv_satellite s ON s.satellite_key = sc.satellite_key
-    LEFT JOIN (SELECT
-                 hkc.hub_key,
-                 hkc.owner_key,
-                 hkc.hub_key_column_name,
-                 hc.column_key,
-                 hkc.hub_key_column_type
-               FROM
-                 dv_hub_key_column hkc
-                 JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key) hkc
-      ON hkc.column_key = stc.column_key
-         AND s.hub_key = hkc.hub_key AND s.owner_key = hkc.owner_key
-  WHERE COALESCE(s.is_retired, CAST(0 AS BOOLEAN)) <> CAST(1 AS BOOLEAN)
-        AND stage_table_schema = stage_table_schema_in
-        AND stage_table_name = stage_table_name_in
-        AND s.satellite_name = satellite_name_in
-        AND s.satellite_schema = satellite_schema_in
-        AND st.owner_key = s.owner_key
-  -- list of default columns
-  UNION ALL
-  SELECT
-    CASE WHEN column_name IN ('dv_source_date_time', 'dv_rowstartdate', 'dv_rowstartdate')
-      THEN load_date_time_v
-    WHEN column_name = 'dv_record_source'
-      THEN quote_literal(stage_table_schema_in || '.' || stage_table_name_in)
-    WHEN column_name = 'dv_row_is_current'
-      THEN '1'
-    WHEN column_name = 'dv_rowenddate'
-      THEN default_enddate_v
-    ELSE column_name
-    END         AS stage_col_name,
-    column_name AS hub_col_name,
-    column_type,
-    0,
-    NULL,
-    NULL,
-    1,
-    0
-  FROM fn_get_dv_object_default_columns(satellite_name_in, 'satellite')
-  WHERE is_key = 0
-  -- related hub surrogate key
-  UNION ALL
-  SELECT
-    c.column_name,
-    c.column_name AS sat_col_name,
-    c.column_type,
-    1             AS is_surrogate_key,
-    NULL,
-    NULL,
-    0,
-    0
-  FROM dv_satellite s
-    JOIN dv_hub h ON h.hub_key = s.hub_key
-    JOIN fn_get_dv_object_default_columns(h.hub_name, 'hub') c ON 1 = 1
-  WHERE s.owner_key = h.owner_key
-        AND c.is_key = 1
-        AND s.satellite_name = satellite_name_in
-        AND s.satellite_schema = satellite_schema_in
-)
-SELECT array_to_string(array_agg(t.ssql), E'\n')
-FROM (
-       SELECT 'with src as ' || '( select distinct ' ||
-              array_to_string(
-                  array_agg(
-                      'cast(' || (CASE WHEN sql.is_default = 1
-                        THEN ' '
-                                  ELSE ' s.' END) || sql.stage_col_name || ' as ' || sql.column_type || ') as ' ||
-                      sql.sat_col_name),
-                  ', ') AS ssql
-       FROM sql
-       WHERE sql.is_surrogate_key = 0
-       UNION ALL
-       SELECT DISTINCT ', h.' || sql.sat_col_name || ' as hub_SK ' || ' from ' || stage_table_schema_in || '.' ||
-                       stage_table_name_in
-                       || ' as s full join ' || hub_schema_v ||
-                       '.' ||
-                       hub_name_v ||
-                       ' as h '
-                       ' on '
-       FROM sql
-       WHERE sql.is_surrogate_key = 1
-       UNION ALL
-       SELECT array_to_string(array_agg(' s.' || sql.stage_col_name || '=h.' || sql.hub_key_column_name),
-                              ' and ') || ' where s.dv_process_status=' || quote_literal('PROCESSING')
-       FROM sql
-       WHERE sql.is_business_key = 1
-       UNION ALL
-       -- except statement : checking source to exclude duplicates in time series
-       SELECT ' except  select ' || array_to_string(
-           array_agg(
-               'cast(' ||
-               (CASE WHEN sql.is_default = 0
-                 THEN sql.sat_col_name || ' as ' || sql.column_type || ')'
-                ELSE sql.stage_col_name || ' as ' || sql.column_type || ')' END)),
-           ', ') || ' from ' || satellite_schema_in || '.' || satellite_name_v || ' where ' ||
-              ' dv_row_is_current=1::bit ),'
-       FROM sql
-       UNION ALL
-       -- full load - mark all keys that not found in stage as deleted
-       -- lookup key values
-       SELECT DISTINCT CASE WHEN load_type_in = 'delta'
-         THEN ' '
-                       ELSE
-                         '  deleted as ( update ' || satellite_schema_in || '.' || satellite_name_v
-                         ||
-                         ' as s  set dv_rowenddate=' || load_date_time_v ||
-                         ' from src  where ' ||
-                         -- list of lookup columns
-                         ' s.' || sql.sat_col_name ||
-                         '=src.hub_SK  and src.dv_record_source is null and s.dv_row_is_current=1::bit ), '
-                       END
-       FROM sql
-       WHERE sql.is_surrogate_key = 1
-       UNION ALL
-       -- update row if key is found
-       SELECT ' updates as ( update ' || satellite_schema_in || '.' || satellite_name_v
-       UNION ALL
-       SELECT 'as u  set dv_row_is_current=0::bit,dv_rowenddate=' || load_date_time_v
-       UNION ALL
-       SELECT ' from src '
-       UNION ALL
-       SELECT ' where u.' || sql.sat_col_name ||
-              '=src.hub_SK and src.dv_record_source is not null and u.dv_row_is_current=1::bit ' ||
-              E'\n returning src.* )'
-       FROM sql
-       WHERE sql.is_surrogate_key = 1
-       UNION ALL
-       -- if new record insert
-       SELECT ' insert into ' || satellite_schema_in || '.' || satellite_name_v || '(' ||
-              array_to_string(array_agg(sql.sat_col_name),
-                              ', ') || ')'
-       FROM sql
-       UNION ALL
-       SELECT 'select distinct r.* from (select ' || array_to_string(array_agg(sql.sat_col_name), ', ')
-              || ',hub_SK ' ||
-              ' from updates u union all select ' || array_to_string(array_agg(sql.sat_col_name), ', ') ||
-              ',src.hub_SK ' ||
-              ' from src where src.hub_SK is not null ) r '
-       FROM sql
-       WHERE is_surrogate_key = 0
-       UNION ALL
-       SELECT ' ;'
+    -- list of stage table- satellite match and hub key lookup column
+    SELECT
+      stc.column_name AS stage_col_name,
+      stc.column_name AS sat_col_name,
+      stc.column_type,
+      0               AS is_surrogate_key,
+      hkc.hub_key_column_name,
+      hkc.hub_key_column_type,
+      0                  is_default,
+      CASE WHEN hkc.hub_key_column_name IS NOT NULL
+        THEN 1
+      ELSE 0 END         is_business_key
+    FROM dv_stage_table st
+      JOIN dv_stage_table_column stc ON st.stage_table_key = stc.stage_table_key
+      JOIN dv_satellite_column sc ON sc.column_key = stc.column_key
+      JOIN dv_satellite s ON s.satellite_key = sc.satellite_key
+      LEFT JOIN (SELECT
+                   hkc.hub_key,
+                   hkc.owner_key,
+                   hkc.hub_key_column_name,
+                   hc.column_key,
+                   hkc.hub_key_column_type
+                 FROM
+                   dv_hub_key_column hkc
+                   JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key) hkc
+        ON hkc.column_key = stc.column_key
+           AND s.hub_key = hkc.hub_key AND s.owner_key = hkc.owner_key
+    WHERE COALESCE(s.is_retired, CAST(0 AS BOOLEAN)) <> CAST(1 AS BOOLEAN)
+          AND stage_table_schema = stage_table_schema_in
+          AND stage_table_name = stage_table_name_in
+          AND s.satellite_name = satellite_name_in
+          AND s.satellite_schema = satellite_schema_in
+          AND st.owner_key = s.owner_key
+    -- list of default columns
+    UNION ALL
+    SELECT
+      CASE WHEN column_name IN ('dv_source_date_time', 'dv_rowstartdate', 'dv_rowstartdate')
+        THEN load_date_time_v
+      WHEN column_name = 'dv_record_source'
+        THEN quote_literal(stage_table_schema_in || '.' || stage_table_name_in)
+      WHEN column_name = 'dv_row_is_current'
+        THEN '1'
+      WHEN column_name = 'dv_rowenddate'
+        THEN default_enddate_v
+      ELSE column_name
+      END         AS stage_col_name,
+      column_name AS hub_col_name,
+      column_type,
+      0,
+      NULL,
+      NULL,
+      1,
+      0
+    FROM fn_get_dv_object_default_columns(satellite_name_in, 'satellite')
+    WHERE is_key = 0
+    -- related hub surrogate key
+    UNION ALL
+    SELECT
+      c.column_name,
+      c.column_name AS sat_col_name,
+      c.column_type,
+      1             AS is_surrogate_key,
+      NULL,
+      NULL,
+      0,
+      0
+    FROM dv_satellite s
+      JOIN dv_hub h ON h.hub_key = s.hub_key
+      JOIN fn_get_dv_object_default_columns(h.hub_name, 'hub') c ON 1 = 1
+    WHERE s.owner_key = h.owner_key
+          AND c.is_key = 1
+          AND s.satellite_name = satellite_name_in
+          AND s.satellite_schema = satellite_schema_in
+  )
+  SELECT array_to_string(array_agg(t.ssql), E'\n')
+  FROM (
+         SELECT 'with src as ' || '( select distinct ' ||
+                array_to_string(
+                    array_agg(
+                        'cast(' || (CASE WHEN sql.is_default = 1
+                          THEN ' '
+                                    ELSE ' s.' END) || sql.stage_col_name || ' as ' || sql.column_type || ') as ' ||
+                        sql.sat_col_name),
+                    ', ') AS ssql
+         FROM sql
+         WHERE sql.is_surrogate_key = 0
+         UNION ALL
+         SELECT DISTINCT ', h.' || sql.sat_col_name || ' as hub_SK ' || ' from ' || stage_table_schema_in || '.' ||
+                         stage_table_name_in
+                         || ' as s full join ' || hub_schema_v ||
+                         '.' ||
+                         hub_name_v ||
+                         ' as h '
+                         ' on '
+         FROM sql
+         WHERE sql.is_surrogate_key = 1
+         UNION ALL
+         SELECT array_to_string(array_agg(' s.' || sql.stage_col_name || '=h.' || sql.hub_key_column_name),
+                                ' and ') || ' where s.dv_process_status=' || quote_literal('PROCESSING')
+         FROM sql
+         WHERE sql.is_business_key = 1
+         UNION ALL
+         -- except statement : checking source to exclude duplicates in time series
+         SELECT ' except  select ' || array_to_string(
+             array_agg(
+                 'cast(' ||
+                 (CASE WHEN sql.is_default = 0
+                   THEN sql.sat_col_name || ' as ' || sql.column_type || ')'
+                  ELSE sql.stage_col_name || ' as ' || sql.column_type || ')' END)),
+             ', ') || ' from ' || satellite_schema_in || '.' || satellite_name_v || ' where ' ||
+                ' dv_row_is_current=1::bit ),'
+         FROM sql
+         UNION ALL
+         -- full load - mark all keys that not found in stage as deleted
+         -- lookup key values
+         SELECT DISTINCT CASE WHEN load_type_in = 'delta'
+           THEN ' '
+                         ELSE
+                           '  deleted as ( update ' || satellite_schema_in || '.' || satellite_name_v
+                           ||
+                           ' as s  set dv_rowenddate=' || load_date_time_v ||
+                           ' from src  where ' ||
+                           -- list of lookup columns
+                           ' s.' || sql.sat_col_name ||
+                           '=src.hub_SK  and src.dv_record_source is null and s.dv_row_is_current=1::bit ), '
+                         END
+         FROM sql
+         WHERE sql.is_surrogate_key = 1
+         UNION ALL
+         -- update row if key is found
+         SELECT ' updates as ( update ' || satellite_schema_in || '.' || satellite_name_v
+         UNION ALL
+         SELECT 'as u  set dv_row_is_current=0::bit,dv_rowenddate=' || load_date_time_v
+         UNION ALL
+         SELECT ' from src '
+         UNION ALL
+         SELECT ' where u.' || sql.sat_col_name ||
+                '=src.hub_SK and src.dv_record_source is not null and u.dv_row_is_current=1::bit ' ||
+                E'\n returning src.* )'
+         FROM sql
+         WHERE sql.is_surrogate_key = 1
+         UNION ALL
+         -- if new record insert
+         SELECT ' insert into ' || satellite_schema_in || '.' || satellite_name_v || '(' ||
+                array_to_string(array_agg(sql.sat_col_name),
+                                ', ') || ')'
+         FROM sql
+         UNION ALL
+         SELECT 'select distinct r.* from (select ' || array_to_string(array_agg(sql.sat_col_name), ', ')
+                || ',hub_SK ' ||
+                ' from updates u union all select ' || array_to_string(array_agg(sql.sat_col_name), ', ') ||
+                ',src.hub_SK ' ||
+                ' from src where src.hub_SK is not null ) r '
+         FROM sql
+         WHERE is_surrogate_key = 0
+         UNION ALL
+         SELECT ' ;'
 
-     ) t
-INTO sql_block_body_v;
+       ) t
+  INTO sql_block_body_v;
 
 
   RETURN sql_block_start_v || sql_process_start_v || sql_block_body_v || sql_process_finish_v || sql_block_end_v;
@@ -1818,9 +1857,10 @@ INTO sql_block_body_v;
 END
 $fun$
 
-/*************************function dealing with source and stage processing statuses**********************************/
 
- RAISE NOTICE 'Configuring helper functions...';
+  /*************************function dealing with source and stage processing statuses**********************************/
+
+  RAISE NOTICE 'Configuring helper functions...';
 
 
 CREATE OR REPLACE FUNCTION fn_set_source_process_status(table_schema_in CHARACTER VARYING,
@@ -1857,9 +1897,9 @@ END
 $$
 
 
-
-CREATE FUNCTION fn_source_cleanup (table_schema_in character varying, table_name_in character varying) RETURNS text
-	LANGUAGE plpgsql
+CREATE FUNCTION fn_source_cleanup(table_schema_in CHARACTER VARYING, table_name_in CHARACTER VARYING)
+  RETURNS TEXT
+LANGUAGE plpgsql
 AS $$
 DECLARE
   sql_v            TEXT;
@@ -1876,18 +1916,18 @@ $$
 
 
 
-/************************* logger **********************************************************************/
- RAISE NOTICE 'Configuring logging module...';
+  /************************* logger **********************************************************************/
+  RAISE NOTICE 'Configuring logging module...';
 
 
 CREATE SEQUENCE dv_log_id_seq START 1;
 
 CREATE TABLE dv_log
 (
-    id INTEGER DEFAULT nextval('dv_log_id_seq'::regclass) PRIMARY KEY NOT NULL,
-    log_datetime TIMESTAMP,
-    log_proc TEXT,
-    message TEXT
+  id           INTEGER DEFAULT nextval('dv_log_id_seq' :: REGCLASS) PRIMARY KEY NOT NULL,
+  log_datetime TIMESTAMP,
+  log_proc     TEXT,
+  message      TEXT
 );
 
 
@@ -1906,7 +1946,7 @@ LANGUAGE plpgsql;
 
 /************************* scheduler **********************************************************************/
 
- RAISE NOTICE 'Configuring schedule module...';
+RAISE NOTICE 'Configuring schedule module...';
 
 CREATE SEQUENCE dv_schedule_seq START 1;
 
@@ -2083,7 +2123,7 @@ BEGIN
 
   END IF;
 
-   -- update status of the task to done or failed depending on execution
+  -- update status of the task to done or failed depending on execution
   UPDATE dv_schedule_task_queue
   SET process_status = status_v, update_datetime = now()
   WHERE job_id = job_id_v AND schedule_key = schedule_key_in AND schedule_task_key = task_key_v;
@@ -2132,7 +2172,6 @@ END
 $$
 
 
-
 CREATE OR REPLACE FUNCTION dv_init_schedule_task_run()
   RETURNS TRIGGER
 AS $body$
@@ -2172,7 +2211,7 @@ CREATE TABLE dv_schedule_task_queue
   task_level        INT,
   process_status    VARCHAR(50),
   script            TEXT,
-  exec_type varchar(30),
+  exec_type         VARCHAR(30),
   start_datetime    TIMESTAMP,
   update_datetime   TIMESTAMP,
   owner_key         INT
@@ -2192,7 +2231,7 @@ CREATE TABLE dv_schedule_task_queue_history
   task_level        INT,
   process_status    VARCHAR(50),
   script            TEXT,
-  exec_type varchar(30),
+  exec_type         VARCHAR(30),
   start_datetime    TIMESTAMP,
   update_datetime   TIMESTAMP,
   owner_key         INT,
@@ -2200,16 +2239,17 @@ CREATE TABLE dv_schedule_task_queue_history
 );
 
 
-
-CREATE FUNCTION fn_get_dv_object_load_script (object_key_in integer, object_type_in character varying, load_type_in character varying, owner_key_in integer) RETURNS text
-	LANGUAGE plpgsql
+CREATE FUNCTION fn_get_dv_object_load_script(object_key_in INTEGER, object_type_in CHARACTER VARYING,
+                                             load_type_in  CHARACTER VARYING, owner_key_in INTEGER)
+  RETURNS TEXT
+LANGUAGE plpgsql
 AS $$
 DECLARE
   sql_v TEXT;
 BEGIN
 
   CASE
-    WHEN object_type_in in ('business_rule' , 'business_rule_proc')
+    WHEN object_type_in IN ('business_rule', 'business_rule_proc')
     THEN
       -- 1. business_rule/ stage table
       -- if it is stored procedure then different
@@ -2217,14 +2257,15 @@ BEGIN
       INTO sql_v
       FROM dv_business_rule
       WHERE business_rule_key = object_key_in
-            AND is_retired = false
+            AND is_retired = FALSE
             AND owner_key = owner_key_in;
 
-    WHEN object_type_in='hub'
+    WHEN object_type_in = 'hub'
     THEN
       -- 2. hub
       SELECT DISTINCT
-        'select ore_config.dv_config_dv_load_hub(''' || st.stage_table_schema || ''',''' || st.stage_table_name || ''',''' ||
+        'select ore_config.dv_config_dv_load_hub(''' || st.stage_table_schema || ''',''' || st.stage_table_name ||
+        ''',''' ||
         h.hub_schema || ''',''' ||
         h.hub_name || ''');'
       INTO sql_v
@@ -2233,20 +2274,21 @@ BEGIN
         JOIN dv_hub_column hc ON hc.hub_key_column_key = hk.hub_key_column_key
         JOIN dv_stage_table_column sc ON sc.column_key = hc.column_key
         JOIN dv_stage_table st ON st.stage_table_key = sc.stage_table_key
-      WHERE h.owner_key = owner_key_in AND h.is_retired = false AND st.is_retired = false AND sc.is_retired = false
+      WHERE h.owner_key = owner_key_in AND h.is_retired = FALSE AND st.is_retired = FALSE AND sc.is_retired = FALSE
             AND st.stage_table_key = object_key_in;
-    WHEN object_type_in='satellite'
+    WHEN object_type_in = 'satellite'
     THEN
       -- 3. satellite
       SELECT DISTINCT
-        'select ore_config.dv_config_dv_load_satellite(''' || st.stage_table_schema || ''',''' || st.stage_table_name || ''',''' ||
+        'select ore_config.dv_config_dv_load_satellite(''' || st.stage_table_schema || ''',''' || st.stage_table_name ||
+        ''',''' ||
         s.satellite_schema || ''',''' || s.satellite_name || ''',''' || load_type_in || ''');'
       INTO sql_v
       FROM dv_satellite s
         JOIN dv_satellite_column sc ON sc.satellite_key = s.satellite_key
         JOIN dv_stage_table_column stc ON stc.column_key = sc.column_key
         JOIN dv_stage_table st ON stc.stage_table_key = st.stage_table_key
-      WHERE s.is_retired = false AND st.is_retired = false AND stc.is_retired = false
+      WHERE s.is_retired = FALSE AND st.is_retired = FALSE AND stc.is_retired = FALSE
             AND s.owner_key = owner_key_in
             AND st.stage_table_key = object_key_in;
   ELSE
@@ -2260,7 +2302,6 @@ BEGIN
 END
 $$;
 
-
 -- list of valid schedule tasks & execution sctipts
 CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
   SELECT
@@ -2270,7 +2311,7 @@ CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
     t.schedule_frequency,
     t.schedule_task_key,
     t.parent_task_key,
-    t.depth                                                                             AS task_level,
+    t.depth                                                                                        AS task_level,
     t.object_key,
     t.object_type,
     t.load_type,
@@ -2321,17 +2362,19 @@ CREATE OR REPLACE VIEW dv_schedule_valid_tasks AS
     ) t;
 
 
-CREATE FUNCTION dv_load_source_status_update (owner_name_in character varying, system_name_in character varying, table_schema_in character varying, table_name_in character varying) RETURNS void
-	LANGUAGE plpgsql
+CREATE FUNCTION dv_load_source_status_update(owner_name_in   CHARACTER VARYING, system_name_in CHARACTER VARYING,
+                                             table_schema_in CHARACTER VARYING, table_name_in CHARACTER VARYING)
+  RETURNS VOID
+LANGUAGE plpgsql
 AS $$
 DECLARE
-  owner_key_v          INTEGER;
-  start_time_v         TIMESTAMP;
-  process_status_v     VARCHAR(20) :='queued';
-  schedule_key_v       INT;
-  state_v              VARCHAR;
-  proc_v               VARCHAR(50) :='dv_load_source_status_update';
-  job_id_v             INT;
+  owner_key_v      INTEGER;
+  start_time_v     TIMESTAMP;
+  process_status_v VARCHAR(20) :='queued';
+  schedule_key_v   INT;
+  state_v          VARCHAR;
+  proc_v           VARCHAR(50) :='dv_load_source_status_update';
+  job_id_v         INT;
 BEGIN
 
   SET SEARCH_PATH TO ore_config;
@@ -2340,8 +2383,8 @@ BEGIN
   SELECT nextval('dv_job_id_seq' :: REGCLASS)
   INTO job_id_v;
 
-  SELECT dv_log_proc(proc_v, 'Starting execution of job_id-->' ||job_id_v )
-    INTO state_v;
+  SELECT dv_log_proc(proc_v, 'Starting execution of job_id-->' || job_id_v)
+  INTO state_v;
 
   start_time_v:=now();
 
@@ -2402,8 +2445,8 @@ BEGIN
                              AND d.start_datetime < q.start_datetime
   );
 
-SELECT dv_log_proc(proc_v, 'Finished execution of job_id-->' ||job_id_v )
-    INTO state_v;
+  SELECT dv_log_proc(proc_v, 'Finished execution of job_id-->' || job_id_v)
+  INTO state_v;
 
 END
 $$
@@ -2412,8 +2455,8 @@ $$
 
 
 
-/************************* modeller package**********************************************************************/
- RAISE NOTICE 'Configuring modeller...';
+  /************************* modeller package**********************************************************************/
+  RAISE NOTICE 'Configuring modeller...';
 
 CREATE TABLE dv_model_L1_design
 (
@@ -2886,8 +2929,8 @@ LANGUAGE plpgsql;
 
 -- modeller
 CREATE OR REPLACE FUNCTION dv_modeller(owner_name_in     VARCHAR, owner_desc_in VARCHAR,
-                                               release_number_in INT,
-                                               release_desc_in   VARCHAR)
+                                       release_number_in INT,
+                                       release_desc_in   VARCHAR)
   RETURNS VOID AS
 $BODY$
 BEGIN
@@ -2918,7 +2961,7 @@ DECLARE
   owner_key_v   INT;
   release_key_v INT;
   cnt_v         INT;
-  release_v     VARCHAR[][];
+  release_v     VARCHAR [] [];
 
 BEGIN
   RAISE NOTICE 'Configuring default values...';
@@ -2958,27 +3001,27 @@ BEGIN
         r.default_subtype,
         r.default_sequence,
         r.data_type,
-        cast(r.default_integer as INTEGER ),
+        cast(r.default_integer AS INTEGER),
         r.default_varchar,
-        cast( r.default_datetime as timestamp),
+        cast(r.default_datetime AS TIMESTAMP),
         owner_key_v,
         release_key_v
       FROM (
              SELECT
-               'hub' as default_type,
-               'filegroup' as default_subtype,
-               1 as default_sequence,
-               'varchar' as data_type,
-               null as default_integer,
-               'primary' as default_varchar,
-               NULL as default_datetime
+               'hub'       AS default_type,
+               'filegroup' AS default_subtype,
+               1           AS default_sequence,
+               'varchar'   AS data_type,
+               NULL        AS default_integer,
+               'primary'   AS default_varchar,
+               NULL        AS default_datetime
              UNION ALL
              SELECT
                'hub',
                'prefix',
                1,
                'varchar',
-              null ,
+               NULL,
                'h_',
                NULL
              UNION ALL
@@ -2996,7 +3039,7 @@ BEGIN
                'suffix',
                1,
                'varchar',
-              null ,
+               NULL,
                '_key',
                NULL
              UNION ALL
@@ -3005,7 +3048,7 @@ BEGIN
                'filegroup',
                1,
                'varchar',
-               NULL ,
+               NULL,
                'primary',
                NULL
              UNION ALL
@@ -3014,7 +3057,7 @@ BEGIN
                'prefix',
                1,
                'varchar',
-              null ,
+               NULL,
                's_',
                NULL
              UNION ALL
@@ -3023,7 +3066,7 @@ BEGIN
                'suffix',
                1,
                'varchar',
-               null ,
+               NULL,
                '_key',
                NULL) r;
 
@@ -3227,7 +3270,7 @@ BEGIN
     RETURN;
   END IF;
 
-   RAISE NOTICE 'Completed...';
+  RAISE NOTICE 'Completed...';
 
 END;
 $$;
