@@ -1,66 +1,133 @@
-set SEARCH_PATH to ore_config;
+SET SEARCH_PATH TO ore_config;
 
 -- model design
 
-select object_type, object_schema, object_name, object_relationship, is_parent
+SELECT
+  object_type,
+  object_schema,
+  object_name,
+  object_relationship,
+  is_parent
 FROM
   (
-    select 'hub' as object_type, hub_schema as object_schema, hub_name as object_name, hub_key as object_relationship, 1 as is_parent from dv_hub
-    union ALL
-    select 'satellite', satellite_schema, satellite_name, hub_key, 0 from dv_satellite
-    union ALL
-    select 'source_system', source_system_schema, source_system_name, source_system_key, 1 from dv_source_system
-    union all
-    select 'source_table', source_table_schema, source_table_name, system_key, 0 from dv_source_table
-    union all
-    select 'stage_table', stage_table_schema, stage_table_name, system_key, 0 from dv_stage_table
-  )t;
+    SELECT
+      'hub'      AS object_type,
+      hub_schema AS object_schema,
+      hub_name   AS object_name,
+      hub_key    AS object_relationship,
+      1          AS is_parent
+    FROM dv_hub
+    UNION ALL
+    SELECT
+      'satellite',
+      satellite_schema,
+      satellite_name,
+      hub_key,
+      0
+    FROM dv_satellite
+    UNION ALL
+    SELECT
+      'source_system',
+      source_system_schema,
+      source_system_name,
+      source_system_key,
+      1
+    FROM dv_source_system
+    UNION ALL
+    SELECT
+      'source_table',
+      source_table_schema,
+      source_table_name,
+      system_key,
+      0
+    FROM dv_source_table
+    UNION ALL
+    SELECT
+      'stage_table',
+      stage_table_schema,
+      stage_table_name,
+      system_key,
+      0
+    FROM dv_stage_table
+  ) t;
 
 -- model contents
 
-  select
-    object_type ,
-    object_name ,
-    object_schema ,
-    column_name ,
-    column_type ,
-    column_length ,
-    column_precision ,
-    column_scale
-from (
-select 'stage_table' as object_type, s.stage_table_name as object_name, s.stage_table_schema as object_schema,
-  st.column_name as column_name, st.column_type , st.column_length, st.column_precision, st.column_scale
-from dv_stage_table_column st join dv_stage_table s on s.stage_table_key=st.stage_table_key
-  union all
-select 'hub', h.hub_name, h.hub_schema, hk.hub_key_column_name, hk.hub_key_column_type, hk.hub_key_column_length, hk.hub_key_column_precision, hk.hub_key_column_scale
-from dv_hub_key_column hk join dv_hub h on h.hub_key=hk.hub_key
+SELECT
+  object_type,
+  object_name,
+  object_schema,
+  column_name,
+  column_type,
+  column_length,
+  column_precision,
+  column_scale
+FROM (
+       SELECT
+         'stage_table'        AS object_type,
+         s.stage_table_name   AS object_name,
+         s.stage_table_schema AS object_schema,
+         st.column_name       AS column_name,
+         st.column_type,
+         st.column_length,
+         st.column_precision,
+         st.column_scale
+       FROM dv_stage_table_column st
+         JOIN dv_stage_table s ON s.stage_table_key = st.stage_table_key
+       UNION ALL
+       SELECT
+         'hub',
+         h.hub_name,
+         h.hub_schema,
+         hk.hub_key_column_name,
+         hk.hub_key_column_type,
+         hk.hub_key_column_length,
+         hk.hub_key_column_precision,
+         hk.hub_key_column_scale
+       FROM dv_hub_key_column hk
+         JOIN dv_hub h ON h.hub_key = hk.hub_key
 
-) t;
+     ) t;
 
 -- mapping
 
-select
-    mapping_type ,
-    object_name_in ,
-    object_schema_in ,
-    column_name_in ,
-    object_name_out ,
-    object_schema_out ,
-    column_name_out
-from
-(
-select 'satellite' as mapping_type, s.satellite_name as object_name_in, s.satellite_schema as object_schema_in ,
-stc.column_name as column_name_in, st.stage_table_name as object_name_out, st.stage_table_schema as object_schema_out,
-  stc.column_name as column_name_out
-from dv_satellite_column sc join dv_stage_table_column stc on sc.column_key=stc.column_key
-  join dv_satellite s on s.satellite_key=sc.satellite_key
-  join dv_stage_table st on st.stage_table_key=stc.stage_table_key
- union ALL
- select 'hub', h.hub_name, h.hub_schema, hkc.hub_key_column_name, st.stage_table_name, st.stage_table_schema, stc.column_name from dv_hub h join dv_hub_key_column hkc on hkc.hub_key=h.hub_key
-  join dv_hub_column hc on hc.hub_key_column_key=hkc.hub_key_column_key
-  join dv_stage_table_column stc on stc.column_key=hc.column_key
-  join dv_stage_table st on st.stage_table_key=stc.stage_table_key
-)t;
+SELECT
+  mapping_type,
+  object_name_in,
+  object_schema_in,
+  column_name_in,
+  object_name_out,
+  object_schema_out,
+  column_name_out
+FROM
+  (
+    SELECT
+      'satellite'           AS mapping_type,
+      s.satellite_name      AS object_name_in,
+      s.satellite_schema    AS object_schema_in,
+      stc.column_name       AS column_name_in,
+      st.stage_table_name   AS object_name_out,
+      st.stage_table_schema AS object_schema_out,
+      stc.column_name       AS column_name_out
+    FROM dv_satellite_column sc
+      JOIN dv_stage_table_column stc ON sc.column_key = stc.column_key
+      JOIN dv_satellite s ON s.satellite_key = sc.satellite_key
+      JOIN dv_stage_table st ON st.stage_table_key = stc.stage_table_key
+    UNION ALL
+    SELECT
+      'hub',
+      h.hub_name,
+      h.hub_schema,
+      hkc.hub_key_column_name,
+      st.stage_table_name,
+      st.stage_table_schema,
+      stc.column_name
+    FROM dv_hub h
+      JOIN dv_hub_key_column hkc ON hkc.hub_key = h.hub_key
+      JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key
+      JOIN dv_stage_table_column stc ON stc.column_key = hc.column_key
+      JOIN dv_stage_table st ON st.stage_table_key = stc.stage_table_key
+  ) t;
 
 -- scheduling
 
@@ -109,48 +176,49 @@ FROM
           br_type
         FROM
           (
-/*
-            SELECT DISTINCT
-              'satellite'           AS object_type,
-              s.satellite_name      AS object_name,
-              s.satellite_schema    AS object_schema,
-              st.stage_table_name   AS source_name,
-              st.stage_table_schema AS source_schema,
-              st.stage_table_key,
-              s.satellite_key       AS object_key,
-              ''                    AS br_name,
-              ''                    AS br_logic,
-              ''                    AS br_load_type,
-              ''                    AS br_type
+            /*
+                        SELECT DISTINCT
+                          'satellite'           AS object_type,
+                          s.satellite_name      AS object_name,
+                          s.satellite_schema    AS object_schema,
+                          st.stage_table_name   AS source_name,
+                          st.stage_table_schema AS source_schema,
+                          st.stage_table_key,
+                          s.satellite_key       AS object_key,
+                          ''                    AS br_name,
+                          ''                    AS br_logic,
+                          ''                    AS br_load_type,
+                          ''                    AS br_type
 
-            FROM dv_satellite_column sc
-              JOIN dv_stage_table_column stc ON sc.column_key = stc.column_key
-              JOIN dv_satellite s ON s.satellite_key = sc.satellite_key
-              JOIN dv_stage_table st ON st.stage_table_key = stc.stage_table_key
-            UNION ALL
-            SELECT DISTINCT
-              'hub',
-              h.hub_name,
-              h.hub_schema,
-              st.stage_table_name,
-              st.stage_table_schema,
-              st.stage_table_key,
-              h.hub_key,
-              '',
-              '',
-              '',
-              ''
-            FROM dv_hub h
-              JOIN dv_hub_key_column hkc ON hkc.hub_key = h.hub_key
-              JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key
-              JOIN dv_stage_table_column stc ON stc.column_key = hc.column_key
-              JOIN dv_stage_table st ON st.stage_table_key = stc.stage_table_key
+                        FROM dv_satellite_column sc
+                          JOIN dv_stage_table_column stc ON sc.column_key = stc.column_key
+                          JOIN dv_satellite s ON s.satellite_key = sc.satellite_key
+                          JOIN dv_stage_table st ON st.stage_table_key = stc.stage_table_key
+                        UNION ALL
+                        SELECT DISTINCT
+                          'hub',
+                          h.hub_name,
+                          h.hub_schema,
+                          st.stage_table_name,
+                          st.stage_table_schema,
+                          st.stage_table_key,
+                          h.hub_key,
+                          '',
+                          '',
+                          '',
+                          ''
+                        FROM dv_hub h
+                          JOIN dv_hub_key_column hkc ON hkc.hub_key = h.hub_key
+                          JOIN dv_hub_column hc ON hc.hub_key_column_key = hkc.hub_key_column_key
+                          JOIN dv_stage_table_column stc ON stc.column_key = hc.column_key
+                          JOIN dv_stage_table st ON st.stage_table_key = stc.stage_table_key
 
-            UNION ALL*/
+                        UNION ALL*/
             SELECT
-              'source' AS object_type,,
-              ''  AS object_name,
-              '' AS object_schema,
+              'source' AS object_type,
+              ,
+              ''       AS object_name,
+              ''       AS object_schema,
               source_table_name,
               source_table_schema,
               source_table_key,
@@ -179,17 +247,19 @@ FROM
             FROM dv_business_rule b
               JOIN dv_stage_table s ON s.stage_table_key = b.stage_table_key
           ) t
-      ) m ON s.object_key = case when m.object_type in ('hub','satellite') then m.stage_table_key  else m.object_key end AND s.object_type = m.object_type
+      ) m ON s.object_key = CASE WHEN m.object_type IN ('hub', 'satellite')
+        THEN m.stage_table_key
+                            ELSE m.object_key END AND s.object_type = m.object_type
   ) x
 ORDER BY 1, 10;
 
-select * from dv_schedule_valid_tasks
-order by schedule_name, task_level;
+SELECT *
+FROM dv_schedule_valid_tasks
+ORDER BY schedule_name, task_level;
 
 
-select * from dv_business_rule;
-
-
+SELECT *
+FROM dv_business_rule;
 
 --------------------
 
@@ -236,25 +306,25 @@ FROM
           (
 
             SELECT
-              'source' AS object_type,
-              source_table_name as source_name,
+              'source'            AS object_type,
+              source_table_name   AS source_name,
               source_table_schema AS source_schema,
-              source_table_key as object_key,
-              '' AS br_name,
-              '' AS br_logic,
-              '' AS br_load_type,
-              '' AS br_type
+              source_table_key    AS object_key,
+              ''                  AS br_name,
+              ''                  AS br_logic,
+              ''                  AS br_load_type,
+              ''                  AS br_type
             FROM dv_source_table
-            union ALL
-              SELECT
-              'stage' AS object_type,
-              stage_table_name as source_name,
+            UNION ALL
+            SELECT
+              'stage'            AS object_type,
+              stage_table_name   AS source_name,
               stage_table_schema AS source_schema,
-              stage_table_key as object_key,
-              '' AS br_name,
-              '' AS br_logic,
-              '' AS br_load_type,
-              '' AS br_type
+              stage_table_key    AS object_key,
+              ''                 AS br_name,
+              ''                 AS br_logic,
+              ''                 AS br_load_type,
+              ''                 AS br_type
             FROM dv_stage_table
             UNION ALL
             SELECT
@@ -272,6 +342,8 @@ FROM
             FROM dv_business_rule b
               JOIN dv_stage_table s ON s.stage_table_key = b.stage_table_key
           ) t
-      ) m ON s.object_key =  m.object_key  AND case when s.object_type in ('hub','satellite') then 'stage' else s.object_type end = m.object_type
+      ) m ON s.object_key = m.object_key AND CASE WHEN s.object_type IN ('hub', 'satellite')
+        THEN 'stage'
+                                             ELSE s.object_type END = m.object_type
   ) x
 ORDER BY 1, 10;
