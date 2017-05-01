@@ -368,7 +368,8 @@ BEGIN
 
       RAISE NOTICE 'Object key 2 source or stage tables -->%', object2_key_v;
       -- configure and add business rules
-      IF rh.business_rule_name IS NOT NULL
+      IF rh.object_type like '%business_rule%'
+      --rh.business_rule_name in ('')
       THEN
 
         object_v:=array_fill(NULL :: VARCHAR, ARRAY [7, 2]);
