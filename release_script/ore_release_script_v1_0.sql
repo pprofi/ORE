@@ -893,6 +893,25 @@ BEGIN
       -- sql list of columns
       sql_v:=sql_v || quote_ident(column_name_v);
       -- sql list of values
+
+      IF column_value_v IS NULL
+      THEN
+
+        sql_select_v:=sql_select_v || 'NULL';
+
+      ELSE
+
+
+        sql_select_v:=sql_select_v
+                      || ' cast('
+                      || quote_literal(column_value_v)
+                      || ' as '
+                      || column_type_v
+                      || ')';
+
+      END IF;
+
+      /*
       sql_select_v:=sql_select_v
                     || ' cast('
                     || quote_literal(column_value_v)
@@ -900,6 +919,7 @@ BEGIN
                     || column_type_v
                     || ')';
 
+      */
       -- update if column was found
       UPDATE columns_list_tmp
       SET is_found = 1
