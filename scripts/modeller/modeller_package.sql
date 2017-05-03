@@ -49,11 +49,13 @@ CREATE TABLE dv_model_L4_logic
   source_name             VARCHAR,
   source_schema           VARCHAR,
   source_load_type        VARCHAR,
+  is_stage int,
   business_rule_name      VARCHAR,
   business_rule_logic     TEXT,
   business_rule_load_type VARCHAR,
   business_rule_type      VARCHAR,
   rn_order                INT
+
 );
 
 CREATE OR REPLACE FUNCTION dv_model_l1_load_design(owner_name_in     VARCHAR, owner_desc_in VARCHAR,
@@ -402,7 +404,7 @@ BEGIN
 
       -- load source task - find table key
 
-      IF rh.object_type = 'source'
+      IF rh.object_type = 'source' or rh.is_stage=0
       THEN
 
         SELECT source_table_key

@@ -346,7 +346,7 @@ BEGIN
 
       -- load source task - find table key
 
-      IF rh.object_type = 'source'
+      IF rh.object_type = 'source' or rh.is_stage=0
       THEN
 
         SELECT source_table_key
