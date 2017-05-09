@@ -14,8 +14,8 @@ DECLARE
   column_type_v   VARCHAR(30);
   release_key_v   INT;
   owner_key_v     INT;
-  sql_v           VARCHAR(2000);
-  sql_select_v    VARCHAR(2000);
+  sql_v           text;
+  sql_select_v    text;
   array_length_v  INT;
   counter_v       INT;
   delimiter_v     CHAR(10) = ' , ';
