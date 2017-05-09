@@ -1,0 +1,42 @@
+load_metadata_file,source,moj_metadata_trn,osa_source,delta,,,,,1
+load_metadata_file,business_rule,metadata_file,moj_osa_stage,delta,metadata_processing_source,"select ore_config.fn_set_source_process_status('osa_source','moj_metadata_trn','PROCESSING');",delta,block_of_code,2
+load_metadata_file,business_rule_proc,metadata_file,moj_osa_stage,delta,metadata_file,select moj_osa_stage.sp_metadata_file();,delta,procedure,3
+load_metadata_file,business_rule,metadata_file,moj_osa_stage,delta,metadata_cleanup_source,"select  ore_config.fn_source_cleanup('osa_source','moj_metadata_trn');",delta,block_of_code,5
+load_metadata_file,business_rule,metadata_file,moj_osa_stage,delta,metadata_file_processing_stage,"select  ore_config.fn_set_source_process_status('moj_osa_stage','metadata_file','PROCESSING');",delta,block_of_code,6
+load_metadata_file,hub,metadata_file,moj_osa_stage,delta,,,,,7
+load_metadata_file,satellite,metadata_file,moj_osa_stage,delta,,,,,8
+load_metadata_file,business_rule,metadata_file,moj_osa_stage,delta,metadata_file_processed_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','metadata_file','DONE');",delta,block_of_code,9
+load_metadata_file,business_rule,metadata_file,moj_osa_stage,delta,metadata_file_cleanup_stage,"select ore_config.fn_source_cleanup('moj_osa_stage','metadata_file');",delta,block_of_code,10
+load_performance_file,source,moj_performance_trn,osa_source,delta,,,,,1
+load_performance_file,business_rule,metadata_file,moj_osa_stage,delta,performance_processing_source," select ore_config.fn_set_source_process_status('osa_source','moj_performance_trn','PROCESSING');",delta,block_of_code,2
+load_performance_file,business_rule_proc,metadata,moj_osa_stage,delta,performance_metadata,select moj_osa_stage.sp_performance_metadata();,delta,procedure,3
+load_performance_file,business_rule,metadata,moj_osa_stage,delta,metadata_processing_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','metadata','PROCESSING');",delta,block_of_code,4
+load_performance_file,hub,metadata,moj_osa_stage,delta,,,,,5
+load_performance_file,satellite,metadata,moj_osa_stage,delta,,,,,6
+load_performance_file,business_rule,metadata,moj_osa_stage,delta,metadata_processed_stage,"select  ore_config.fn_set_source_process_status('moj_osa_stage','metadata','DONE');",delta,block_of_code,7
+load_performance_file,business_rule,metadata,moj_osa_stage,delta,metadata_cleanup_stage,"select ore_config.fn_source_cleanup('moj_osa_stage','metadata');",delta,block_of_code,8
+load_performance_file,business_rule_proc,performance,moj_osa_stage,delta,performance,select moj_osa_stage.sp_performance();,delta,procedure,9
+load_performance_file,business_rule,performance,moj_osa_stage,delta,performance_processing_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance','PROCESSING');",delta,block_of_code,10
+load_performance_file,hub,performance,moj_osa_stage,delta,,,,,11
+load_performance_file,satellite,performance,moj_osa_stage,delta,,,,,12
+load_performance_file,business_rule,performance,moj_osa_stage,delta,performance_processed_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance','DONE');",delta,block_of_code,13
+load_performance_file,business_rule,performance,moj_osa_stage,delta,performance_cleanup_stage,"select ore_config.fn_source_cleanup('moj_osa_stage','performance');",delta,block_of_code,14
+load_performance_file,business_rule_proc,performance_cpu,moj_osa_stage,delta,performance_cpu,select moj_osa_stage.sp_performance_cpu();,delta,procedure,15
+load_performance_file,business_rule,performance_cpu,moj_osa_stage,delta,performance_cpu_processing_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance_cpu','PROCESSING');",delta,block_of_code,16
+load_performance_file,hub,performance_cpu,moj_osa_stage,delta,,,,,17
+load_performance_file,satellite,performance_cpu,moj_osa_stage,delta,,,,,18
+load_performance_file,business_rule,performance_cpu,moj_osa_stage,delta,performance_cpu_processed_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance_cpu','DONE');",delta,block_of_code,19
+load_performance_file,business_rule,performance_cpu,moj_osa_stage,delta,performance_cpu_cleanup_stage,"select ore_config.fn_source_cleanup('moj_osa_stage','performance_cpu');",delta,block_of_code,20
+load_performance_file,business_rule_proc,performance_disk_usage,moj_osa_stage,delta,performance_disk_usage,select moj_osa_stage.sp_performance_disk_usage();,delta,procedure,21
+load_performance_file,business_rule,performance_disk_usage,moj_osa_stage,delta,performance_disk_usage_processing_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance_disk_usage','PROCESSING');",delta,block_of_code,22
+load_performance_file,hub,performance_disk_usage,moj_osa_stage,delta,,,,,23
+load_performance_file,satellite,performance_disk_usage,moj_osa_stage,delta,,,,,24
+load_performance_file,business_rule,performance_disk_usage,moj_osa_stage,delta,performance_disk_usage_processed_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance_disk_usage','DONE');",delta,block_of_code,25
+load_performance_file,business_rule,performance_disk_usage,moj_osa_stage,delta,performance_disk_usage_cleanup_stage,"select ore_config.fn_source_cleanup('moj_osa_stage','performance_disk_usage');",delta,block_of_code,26
+load_performance_file,business_rule_proc,performance_disk_space,moj_osa_stage,delta,performance_disk_space,select moj_osa_stage.sp_performance_disk_space();,delta,procedure,27
+load_performance_file,business_rule,performance_disk_space,moj_osa_stage,delta,performance_disk_space_processing_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance_disk_space','PROCESSING');",delta,block_of_code,28
+load_performance_file,hub,performance_disk_space,moj_osa_stage,delta,,,,,29
+load_performance_file,satellite,performance_disk_space,moj_osa_stage,delta,,,,,30
+load_performance_file,business_rule,performance_disk_space,moj_osa_stage,delta,performance_disk_space_processed_stage,"select ore_config.fn_set_source_process_status('moj_osa_stage','performance_disk_space','DONE');",delta,block_of_code,31
+load_performance_file,business_rule,performance_disk_space,moj_osa_stage,delta,performance_disk_space_cleanup_stage,"select ore_config.fn_source_cleanup('moj_osa_stage','performance_disk_space');",delta,block_of_code,32
+load_performance_file,business_rule,metadata_file,moj_osa_stage,delta,performance_cleanup_source,"select ore_config.fn_source_cleanup('osa_source','moj_performance_trn');",delta,block_of_code,34
