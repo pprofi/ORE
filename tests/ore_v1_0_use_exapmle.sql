@@ -92,6 +92,8 @@ SELECT dv_config_object_insert('dv_satellite_column',
 
 -- create dv schema
 CREATE SCHEMA dv;
+
+SET SEARCH_PATH TO ore_config;
 -- generate create statements
 -- stage table
 SELECT *
@@ -101,6 +103,32 @@ FROM dv_config_dv_create_stage_table(
     'N'
 );
 -- hub
+SELECT *
+                   FROM fn_get_dv_object_default_columns('customer', 'hub');
+
+
+                   SELECT
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN rtrim(coalesce(column_prefix, '') || replace(d.column_name, '%', 'customer') ||
+                           coalesce(column_suffix, ''))
+              ELSE d.column_name END AS column_name,
+              column_type,
+              column_length,
+              column_precision,
+              column_scale,
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN 0
+              ELSE 1 END             AS is_nullable,
+              CASE WHEN d.object_column_type = 'Object_Key'
+                THEN 1
+              ELSE 0 END             AS is_key,
+             d.is_indexed
+            FROM dv_default_column d
+            WHERE object_type = 'hub'
+         --   and (d.object_column_type=object_column_type_in or object_column_type_in is null)
+            ORDER BY is_key DESC
+
+
 SELECT *
 FROM dv_config_dv_create_hub(
     'customer',
