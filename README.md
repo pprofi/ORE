@@ -16,7 +16,7 @@ To install ORE, you need to have:
 * administrative rights to be able to create objects
 
 ## Additional Code ##
-The related project "optimal-data-engine-mssql-scripts" in the OptimalBI repository contains a set of scripts, which can be downloaded and used to assist in making use of ODE.
+https://bitbucket.org/optimalbi/ore_data_store_v1_p1100
 
 ## Branches: ##
 Currently, ORE has 3 Branches available:
