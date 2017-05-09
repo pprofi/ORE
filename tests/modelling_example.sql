@@ -1,5 +1,5 @@
 SET SEARCH_PATH TO ore_config;
-
+/*
 CREATE OR REPLACE FUNCTION dv_model_l1_load_design(owner_name_in     VARCHAR, owner_desc_in VARCHAR,
                                                    release_number_in INT,
                                                    release_desc_in   VARCHAR)
@@ -476,13 +476,12 @@ BEGIN
 END
 $BODY$
 LANGUAGE plpgsql;
-
+*/
 
 
 SELECT dv_model_l1_load_design('moj', 'Ministry of Justice',
                                2017042801,
                                'Test of modeller');
-
 
 SELECT dv_model_l2_load_contents(2017042801);
 
